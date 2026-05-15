@@ -1,0 +1,339 @@
+<!--
+  ============================================================================
+  BACKUP — Webflow Site Settings → Custom Code → Head Code
+  ============================================================================
+  fecha-backup:   2026-05-15
+  scope:          global (todo el sitio)
+  source:         Webflow Designer → Site Settings → Custom Code → Head Code
+  motivo:         Snapshot del estado actual antes de aplicar el font preload
+                  (webflow-snippets/_global/font-preload.html) y eventuales
+                  fixes de async en reb2b/GTM.
+  status:         backup (NO usar como referencia activa)
+  ============================================================================
+
+  PROBLEMAS CONOCIDOS EN ESTE BACKUP (a resolver en versiones siguientes):
+
+    1. reb2b script SIN async en el <script> wrapper externo
+       → bloquea el HTML parser ~50-150ms en cada pageload.
+       Pendiente: cambiar <script> por <script async>.
+
+    2. GTM loader SIN async en el <script> wrapper externo
+       → mismo patron que reb2b, ~20-50ms de parse-blocking.
+       Pendiente: cambiar <script> por <script async>.
+
+    3. JSON-LD dinamico ejecutandose en <head> sincronicamente
+       → bloquea parser, hace document.head.appendChild durante parse.
+       El BreadcrumbList que genera duplica info que Google ya infiere.
+       Pendiente: decidir si eliminarlo o moverlo al footer.
+
+    4. NO hay <link rel="preload" as="font"> para Soehne Buch/Kraftig
+       → LCP se ve afectado por descubrimiento tardio de fuentes
+       (descubiertas recien al parsear el CSS).
+       Pendiente: aplicar webflow-snippets/_global/font-preload.html.
+
+  COMO RESTAURAR ESTE BACKUP SI ALGO SE ROMPE:
+    1. Webflow Designer → Site Settings → Custom Code → Head Code
+    2. Borrar todo el contenido actual
+    3. Pegar el contenido entre los marcadores <!-- BEGIN ORIGINAL --> y
+       <!-- END ORIGINAL --> de este archivo
+    4. Save Changes + Publish
+-->
+
+<!-- BEGIN ORIGINAL HEAD CODE (capturado 2026-05-15) -->
+
+<script>!function(key) {if (window.reb2b) return;window.reb2b = {loaded: true};var s = document.createElement("script");s.async = true;s.src = "https://ddwl4m2hdecbv.cloudfront.net/b/" + key + "/" + key + ".js.gz";document.getElementsByTagName("script")[0].parentNode.insertBefore(s, document.getElementsByTagName("script")[0]);}("LNKLDHEZ44OJ");</script>
+
+<!-- Preconfigure Webflow's CDN (reduce latency for CSS that blocks rendering) -->
+<link rel="preconnect" href="https://cdn.prod.website-files.com" crossorigin>
+<meta name="google-site-verification" content="USyphNJbgZC7-k2nf0otByuyYygi_eWYvoKQRNBLItM" />
+
+<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','GTM-TQ62L4N');</script>
+<!-- End Google Tag Manager -->
+<style>
+
+  .faq-title-wrapper{
+    transition: all .12s ease;
+  }
+  .faq-toggle:hover:not(.w--open) .faq-title-wrapper {
+    opacity:0.5;
+  }
+
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+.faq-title-wrapper h4 {
+    white-space: normal;
+}
+div#toc ul {
+    padding: 0;
+}
+div#toc ul li {
+    margin-bottom: 0px;
+    list-style: none;
+    padding: 0.5rem 0;
+}
+div#toc ul li ul {
+    padding-left: 0px;
+    margin-bottom: 0;
+    border-left: 1px solid rgba(25,4,7,.2);
+    margin-top: 0px;
+}
+div#toc ul li ul li {
+    padding: 0px 0px;
+    margin: 10px;
+}
+</style>
+<!-- JavaScript -->
+<script>
+
+  // Prepare your JSON-LD data with JavaScript
+  const jsonLdData = {
+    "@context": "https://schema.org/",
+    "@type": "BreadcrumbList",
+    "itemListElement": [{
+      "@type": "ListItem",
+      "position": 1,
+      "name": "inBeat - #1 Micro Influencer Agency in North America",
+      "item": window.location.origin
+    }, {
+      "@type": "ListItem",
+      "position": 2,
+      "name": document.title,
+      "item": window.location.href
+    }]
+  };
+
+  // Inject the JSON-LD structured data into the document
+  const script = document.createElement('script');
+  script.type = 'application/ld+json';
+  script.textContent = JSON.stringify(jsonLdData);
+  document.head.appendChild(script);
+</script>
+
+<!-- Your JSON-LD structured data is now dynamically created and injected by the JavaScript above -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://inbeat.agency/#organization",
+      "name": "inBeat Agency",
+      "url": "https://inbeat.agency/",
+      "logo": "https://cdn.prod.website-files.com/65f9d9d22fb2f3b3f17c09ed/65fb40b0a663071e3abe2955_inbeat-logo-white.svg",
+      "image": "https://cdn.prod.website-files.com/65f9d9d22fb2f3b3f17c09ed/65fb40b0a663071e3abe2955_inbeat-logo-white.svg",
+      "description": "inBeat is a performance-focused creator content marketing agency specializing in influencer marketing, paid media, performance creative, research panels, and growth marketing.",
+      "email": "hello@inbeat.agency",
+      "sameAs": [
+        "https://ca.linkedin.com/company/inbeat-agency",
+        "https://www.crunchbase.com/organization/inbeat-agency",
+        "https://clutch.co/profile/inbeat-agency"
+      ]
+    },
+    {
+      "@type": "ProfessionalService",
+      "@id": "https://inbeat.agency/#new-york",
+      "name": "inBeat Agency New York",
+      "url": "https://inbeat.agency/locations/new-york/social-media",
+      "image": "https://cdn.prod.website-files.com/65f9d9d22fb2f3b3f17c09ed/65fb40b0a663071e3abe2955_inbeat-logo-white.svg",
+      "telephone": "+1-917-243-9205",
+      "email": "hello@inbeat.agency",
+      "priceRange": "$$$",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "90 Broad St 2nd Floor",
+        "addressLocality": "New York",
+        "addressRegion": "NY",
+        "postalCode": "10004",
+        "addressCountry": "US"
+      },
+      "geo": {
+        "@type": "GeoCoordinates",
+        "latitude": 40.7043,
+        "longitude": -74.0122
+      },
+      "areaServed": {
+        "@type": "City",
+        "name": "New York"
+      },
+      "serviceType": [
+        "Influencer Marketing Agency",
+        "UGC Agency",
+        "Paid Social Media Agency",
+        "Performance Creative Agency",
+        "Social Media Marketing Agency",
+        "TikTok Marketing Agency",
+        "Instagram Marketing Agency",
+        "Meta Advertising Agency",
+        "Google Ads Agency",
+        "User Acquisition Agency",
+        "Research Panel Recruitment",
+        "Growth Marketing Agency",
+        "Content Creation Agency"
+      ],
+      "sameAs": [
+        "https://share.google/mOaeN8EmMht2rqXGU"
+      ],
+      "parentOrganization": {
+        "@id": "https://inbeat.agency/#organization"
+      }
+    },
+    {
+      "@type": "ProfessionalService",
+      "@id": "https://inbeat.agency/#los-angeles",
+      "name": "inBeat Agency Los Angeles",
+      "url": "https://inbeat.agency/locations/los-angeles",
+      "image": "https://cdn.prod.website-files.com/65f9d9d22fb2f3b3f17c09ed/65fb40b0a663071e3abe2955_inbeat-logo-white.svg",
+      "telephone": "+1-323-689-5089",
+      "email": "hello@inbeat.agency",
+      "priceRange": "$$$",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "700 South Flower Street, Suite 1000",
+        "addressLocality": "Los Angeles",
+        "addressRegion": "CA",
+        "postalCode": "90017",
+        "addressCountry": "US"
+      },
+      "geo": {
+        "@type": "GeoCoordinates",
+        "latitude": 34.0522,
+        "longitude": -118.2437
+      },
+      "areaServed": {
+        "@type": "City",
+        "name": "Los Angeles"
+      },
+      "serviceType": [
+        "Influencer Marketing Agency",
+        "UGC Agency",
+        "Paid Social Media Agency",
+        "Performance Creative Agency",
+        "Social Media Marketing Agency",
+        "TikTok Marketing Agency",
+        "Instagram Marketing Agency",
+        "Meta Advertising Agency",
+        "Google Ads Agency",
+        "User Acquisition Agency",
+        "Research Panel Recruitment",
+        "Growth Marketing Agency",
+        "Content Creation Agency"
+      ],
+      "sameAs": [
+        "https://share.google/F99SLugSE6Hr5N1C7"
+      ],
+      "parentOrganization": {
+        "@id": "https://inbeat.agency/#organization"
+      }
+    },
+    {
+      "@type": "ProfessionalService",
+      "@id": "https://inbeat.agency/#chicago",
+      "name": "inBeat Agency Chicago",
+      "url": "https://inbeat.agency/locations/chicago",
+      "image": "https://cdn.prod.website-files.com/65f9d9d22fb2f3b3f17c09ed/65fb40b0a663071e3abe2955_inbeat-logo-white.svg",
+      "telephone": "+1-464-800-7928",
+      "email": "hello@inbeat.agency",
+      "priceRange": "$$$",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "40 E Huron St 3rd Floor",
+        "addressLocality": "Chicago",
+        "addressRegion": "IL",
+        "postalCode": "60611",
+        "addressCountry": "US"
+      },
+      "geo": {
+        "@type": "GeoCoordinates",
+        "latitude": 41.8958,
+        "longitude": -87.6270
+      },
+      "areaServed": {
+        "@type": "City",
+        "name": "Chicago"
+      },
+      "serviceType": [
+        "Influencer Marketing Agency",
+        "UGC Agency",
+        "Paid Social Media Agency",
+        "Performance Creative Agency",
+        "Social Media Marketing Agency",
+        "TikTok Marketing Agency",
+        "Instagram Marketing Agency",
+        "Meta Advertising Agency",
+        "Google Ads Agency",
+        "User Acquisition Agency",
+        "Research Panel Recruitment",
+        "Growth Marketing Agency",
+        "Content Creation Agency"
+      ],
+      "sameAs": [
+        "https://share.google/74lgEPjGp29vHvnzH"
+      ],
+      "parentOrganization": {
+        "@id": "https://inbeat.agency/#organization"
+      }
+    },
+    {
+      "@type": "ProfessionalService",
+      "@id": "https://inbeat.agency/#montreal",
+      "name": "inBeat Agency Montreal",
+      "url": "https://inbeat.agency/",
+      "image": "https://cdn.prod.website-files.com/65f9d9d22fb2f3b3f17c09ed/65fb40b0a663071e3abe2955_inbeat-logo-white.svg",
+      "telephone": "+1-833-800-1506",
+      "email": "hello@inbeat.agency",
+      "priceRange": "$$$",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "51 Rue Sherbrooke O #204",
+        "addressLocality": "Montréal",
+        "addressRegion": "QC",
+        "postalCode": "H2X 1X2",
+        "addressCountry": "CA"
+      },
+      "geo": {
+        "@type": "GeoCoordinates",
+        "latitude": 45.5088,
+        "longitude": -73.5878
+      },
+      "areaServed": {
+        "@type": "City",
+        "name": "Montreal"
+      },
+      "serviceType": [
+        "Influencer Marketing Agency",
+        "UGC Agency",
+        "Paid Social Media Agency",
+        "Performance Creative Agency",
+        "Social Media Marketing Agency",
+        "TikTok Marketing Agency",
+        "Instagram Marketing Agency",
+        "Meta Advertising Agency",
+        "Google Ads Agency",
+        "User Acquisition Agency",
+        "Research Panel Recruitment",
+        "Growth Marketing Agency",
+        "Content Creation Agency"
+      ],
+      "sameAs": [
+        "https://share.google/jsotRswLJ7e61C8Mj"
+      ],
+      "parentOrganization": {
+        "@id": "https://inbeat.agency/#organization"
+      }
+    }
+  ]
+}
+</script>
+
+
+
+<meta name="msvalidate.01" content="7ED3ADA87C05FC6647A200E5FBA14722" />
+
+<!-- END ORIGINAL HEAD CODE -->

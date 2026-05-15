@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Editores
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+
+# Notas locales que no van al repo publico
+NOTES.md
+notes/

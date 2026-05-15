@@ -1,0 +1,520 @@
+/**
+ * Rich Text Performance — inBeat Agency
+ * ============================================================================
+ * Optimizaciones de performance para contenido CMS Rich Text de Webflow.
+ *
+ * APLICA A: Templates CMS que tengan campo Rich Text (.w-richtext)
+ *   - Blog Post Template
+ *   - Author Template
+ *   - Cualquier otro CMS Collection con rich text editorial
+ *
+ * COMO CARGARLO EN WEBFLOW:
+ *   Designer → [Template Page] → Settings → Custom Code → Before </body> tag:
+ *
+ *     <script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.0/blog/rich-text-performance.js" defer></script>
+ *
+ *   (Reemplazar @v1.0.0 con la version actual del repo)
+ *
+ * QUE HACE:
+ *   1. Lazy load + decoding async en imagenes del rich text
+ *   2. fetchpriority="low" en imagenes below-the-fold (mejora LCP)
+ *   3. Setea width/height desde naturalWidth/naturalHeight (mitiga unsized-images)
+ *   4. Facade para YouTube (placeholder + iframe on-click)
+ *   5. Facade para Vimeo, Loom, Frame.io, LinkedIn, Wistia, Spotify
+ *   6. Facade para TikTok (intercepta blockquote antes de que embed.js corra)
+ *   7. Facade para Instagram (intercepta blockquote + bloquea embed.js)
+ *
+ * IMPORTANTE - PRECONDICIONES:
+ *   Si tenes Embeds con scripts globales de TikTok o Instagram en el template
+ *   (<script async src="https://www.tiktok.com/embed.js">), REMOVELOS antes de
+ *   activar este script. El facade los reemplaza. Si embed.js corre primero,
+ *   este script no puede deshacer el daño.
+ *
+ * COMO VERIFICAR DESPUES DE PUBLICAR:
+ *   1. DevTools Console: no debe haber errores
+ *   2. Embeds de YouTube/Vimeo/TikTok/Instagram aparecen como placeholder hasta click
+ *   3. npm run analyze -- <url> deberia mostrar mejor score y LCP
+ * ============================================================================
+ */
+
+(function () {
+  'use strict';
+
+  // ===========================================================================
+  // 1. IMAGENES DEL RICH TEXT
+  // ===========================================================================
+  // Aplicamos varias optimizaciones a cada <img> dentro de .w-richtext:
+  //   - loading=lazy: el browser pospone descarga hasta que se acerque al viewport
+  //   - decoding=async: el browser decodifica off-main-thread, no bloquea render
+  //   - fetchpriority=low EN imagenes below-the-fold: desprioriza el download
+  //     para que el browser priorice el LCP element
+  //   - width/height desde naturalWidth/naturalHeight: reserva espacio post-load
+  //
+  // Caveat honesto: setear width/height POST-LOAD no resuelve CLS inicial
+  // (el espacio ya se computo mal antes). Solo ayuda a evitar CLS en navegacion
+  // interna donde el browser cachea las dimensiones aprendidas.
+  // ===========================================================================
+  function optimizeRichTextImages() {
+    var images = document.querySelectorAll('.w-richtext img');
+    var viewportHeight = window.innerHeight;
+
+    images.forEach(function (img, index) {
+      // Loading + decoding
+      img.setAttribute('loading', 'lazy');
+      img.setAttribute('decoding', 'async');
+
+      // fetchpriority="low" para imagenes below-the-fold
+      // (las primeras ~2 imagenes podrian ser above-the-fold del rich text)
+      var rect = img.getBoundingClientRect();
+      var topAbsolute = rect.top + window.scrollY;
+      if (topAbsolute > viewportHeight * 1.5) {
+        img.setAttribute('fetchpriority', 'low');
+      }
+
+      // Setear width/height desde natural si ya cargo, o cuando cargue
+      if (img.complete && img.naturalWidth > 0) {
+        applyNaturalDimensions(img);
+      } else {
+        img.addEventListener('load', function () {
+          applyNaturalDimensions(img);
+        }, { once: true });
+      }
+    });
+  }
+
+  function applyNaturalDimensions(img) {
+    // Solo seteamos si no estan ya definidos
+    if (!img.getAttribute('width') && img.naturalWidth > 0) {
+      img.setAttribute('width', img.naturalWidth);
+    }
+    if (!img.getAttribute('height') && img.naturalHeight > 0) {
+      img.setAttribute('height', img.naturalHeight);
+    }
+  }
+
+  // ===========================================================================
+  // 2. YOUTUBE FACADE
+  // ===========================================================================
+  // YouTube embed pesa ~500KB de JS para la UI del player + thumbnails + ads.
+  // Reemplazamos el iframe con un placeholder de imagen y boton de play.
+  // El iframe real se carga unicamente cuando el usuario hace click.
+  // ===========================================================================
+  function getYouTubeId(src) {
+    var match = src.match(/(?:embed\/|v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    return match ? match[1] : null;
+  }
+
+  var youtubeFallbacks = ['maxresdefault', 'sddefault', 'hqdefault', 'mqdefault'];
+
+  function setYoutubeThumbnail(img, id, index) {
+    if (index >= youtubeFallbacks.length) return;
+    img.src = 'https://img.youtube.com/vi/' + id + '/' + youtubeFallbacks[index] + '.jpg';
+    img.onerror = function () {
+      setYoutubeThumbnail(img, id, index + 1);
+    };
+    img.onload = function () {
+      // El placeholder generico de YouTube es 120x90 — si lo recibimos, saltar al siguiente
+      if (img.naturalWidth === 120 && img.naturalHeight === 90) {
+        setYoutubeThumbnail(img, id, index + 1);
+      }
+    };
+  }
+
+  function applyYoutubeFacades() {
+    var iframes = document.querySelectorAll('.w-richtext iframe[src*="youtube"]');
+    iframes.forEach(function (iframe) {
+      var id = getYouTubeId(iframe.src);
+      if (!id) return;
+
+      var wrapper = document.createElement('div');
+      wrapper.style.cssText = 'position:relative;cursor:pointer;background:#1a1a1a;aspect-ratio:16/9;width:100%;overflow:hidden;';
+
+      var thumb = document.createElement('img');
+      thumb.alt = 'Video thumbnail';
+      thumb.setAttribute('loading', 'lazy');
+      thumb.setAttribute('decoding', 'async');
+      thumb.style.cssText = 'width:100%;height:100%;object-fit:cover;object-position:center;position:absolute;top:0;left:0;';
+      setYoutubeThumbnail(thumb, id, 0);
+
+      var playBtn = document.createElement('div');
+      playBtn.innerHTML = '&#9654;';
+      playBtn.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(255,0,0,0.85);color:#fff;font-size:24px;width:64px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:8px;pointer-events:none;z-index:1;';
+
+      wrapper.appendChild(thumb);
+      wrapper.appendChild(playBtn);
+
+      wrapper.addEventListener('click', function () {
+        var realIframe = document.createElement('iframe');
+        realIframe.src = 'https://www.youtube.com/embed/' + id + '?autoplay=1';
+        realIframe.setAttribute('frameborder', '0');
+        realIframe.setAttribute('allow', 'autoplay; encrypted-media');
+        realIframe.setAttribute('allowfullscreen', '');
+        realIframe.style.cssText = 'width:100%;height:100%;aspect-ratio:16/9;';
+        wrapper.replaceWith(realIframe);
+      });
+
+      iframe.replaceWith(wrapper);
+    });
+  }
+
+  // ===========================================================================
+  // 3. OTROS IFRAMES (Vimeo, LinkedIn, Loom, Frame.io, Wistia, Spotify)
+  // ===========================================================================
+  // Estrategia comun:
+  //   - Detectar provider por hostname
+  //   - Vimeo: thumbnail real via oEmbed (API publica)
+  //   - Resto: placeholder con titulo del iframe o nombre del provider
+  //   - Preservar TODOS los atributos del iframe original al activar
+  // ===========================================================================
+  function getProviderInfo(src) {
+    try {
+      var url = new URL(src);
+      var host = url.hostname.replace(/^www\./, '');
+      if (host.indexOf('vimeo.com') >= 0) return { name: 'Vimeo', ratio: '16/9', supportsThumb: true };
+      if (host.indexOf('linkedin.com') >= 0) return { name: 'LinkedIn', ratio: null, supportsThumb: false };
+      if (host.indexOf('loom.com') >= 0) return { name: 'Loom', ratio: '16/9', supportsThumb: false };
+      if (host.indexOf('frame.io') >= 0) return { name: 'Frame.io', ratio: '16/9', supportsThumb: false };
+      if (host.indexOf('wistia.') >= 0 || host.indexOf('wistia.net') >= 0) return { name: 'Wistia', ratio: '16/9', supportsThumb: false };
+      if (host.indexOf('spotify.com') >= 0) return { name: 'Spotify', ratio: null, supportsThumb: false };
+      return { name: 'Embed', ratio: null, supportsThumb: false };
+    } catch (e) {
+      return { name: 'Embed', ratio: null, supportsThumb: false };
+    }
+  }
+
+  function fetchVimeoThumb(src, callback) {
+    var oembedUrl = 'https://vimeo.com/api/oembed.json?url=' + encodeURIComponent(src);
+    fetch(oembedUrl)
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) { callback(data && data.thumbnail_url ? data.thumbnail_url : null); })
+      .catch(function () { callback(null); });
+  }
+
+  function applyOtherIframeFacades() {
+    var iframes = document.querySelectorAll('.w-richtext iframe:not([src*="youtube"])');
+    iframes.forEach(function (iframe) {
+      var src = iframe.src;
+      if (!src) return;
+
+      var provider = getProviderInfo(src);
+
+      // Resolver aspect-ratio del wrapper:
+      //   1. Provider con ratio fijo (Vimeo, Loom, etc): usarlo
+      //   2. Sin ratio fijo: derivar de width/height del iframe original
+      //   3. Fallback: 16/9
+      var wrapperRatio = provider.ratio;
+      if (!wrapperRatio) {
+        var w = parseInt(iframe.getAttribute('width'), 10);
+        var h = parseInt(iframe.getAttribute('height'), 10);
+        if (w > 0 && h > 0) wrapperRatio = w + '/' + h;
+        else wrapperRatio = '16/9';
+      }
+
+      // Preservar TODOS los atributos del iframe original
+      var preservedAttrs = {};
+      for (var i = 0; i < iframe.attributes.length; i++) {
+        var attr = iframe.attributes[i];
+        preservedAttrs[attr.name] = attr.value;
+      }
+
+      var wrapper = document.createElement('div');
+      wrapper.setAttribute('role', 'button');
+      wrapper.setAttribute('tabindex', '0');
+      wrapper.setAttribute('aria-label', 'Play ' + provider.name + ' embed');
+      wrapper.style.cssText = [
+        'position:relative',
+        'cursor:pointer',
+        'background:#1a1a1a',
+        'aspect-ratio:' + wrapperRatio,
+        'width:100%',
+        'overflow:hidden',
+        'display:flex',
+        'align-items:center',
+        'justify-content:center'
+      ].join(';');
+
+      // Thumbnail solo Vimeo (oEmbed publico)
+      var thumb = null;
+      if (provider.supportsThumb) {
+        thumb = document.createElement('img');
+        thumb.alt = provider.name + ' thumbnail';
+        thumb.setAttribute('loading', 'lazy');
+        thumb.setAttribute('decoding', 'async');
+        thumb.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;';
+        wrapper.appendChild(thumb);
+        fetchVimeoThumb(src, function (thumbUrl) {
+          if (thumbUrl) thumb.src = thumbUrl;
+        });
+      }
+
+      // Overlay con icono play + label
+      var overlay = document.createElement('div');
+      overlay.style.cssText = 'position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:8px;color:#fff;text-align:center;padding:16px;';
+
+      var playIcon = document.createElement('div');
+      playIcon.innerHTML = '&#9654;';
+      playIcon.setAttribute('aria-hidden', 'true');
+      playIcon.style.cssText = 'font-size:42px;background:rgba(0,0,0,0.5);width:72px;height:50px;border-radius:8px;display:flex;align-items:center;justify-content:center;text-shadow:0 1px 4px rgba(0,0,0,0.6);';
+
+      var label = document.createElement('div');
+      var titleAttr = iframe.getAttribute('title');
+      label.textContent = titleAttr ? titleAttr : ('Play ' + provider.name);
+      label.style.cssText = 'font-size:14px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,0.6);max-width:280px;';
+
+      overlay.appendChild(playIcon);
+      overlay.appendChild(label);
+      wrapper.appendChild(overlay);
+
+      function activateEmbed() {
+        var realIframe = document.createElement('iframe');
+        for (var attrName in preservedAttrs) {
+          if (preservedAttrs.hasOwnProperty(attrName)) {
+            realIframe.setAttribute(attrName, preservedAttrs[attrName]);
+          }
+        }
+        // Forzar autoplay para Vimeo
+        if (provider.name === 'Vimeo' && realIframe.src.indexOf('autoplay=') === -1) {
+          realIframe.src += (realIframe.src.indexOf('?') >= 0 ? '&' : '?') + 'autoplay=1';
+        }
+        realIframe.style.display = 'block';
+        realIframe.style.maxWidth = '100%';
+        wrapper.replaceWith(realIframe);
+      }
+
+      wrapper.addEventListener('click', activateEmbed);
+      wrapper.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          activateEmbed();
+        }
+      });
+
+      iframe.replaceWith(wrapper);
+    });
+  }
+
+  // ===========================================================================
+  // 4. TIKTOK FACADE
+  // ===========================================================================
+  // TikTok usa <blockquote class="tiktok-embed"> + script externo embed.js
+  // (~618 KiB + ~890ms scripting). Interceptamos el blockquote antes que
+  // embed.js lo procese y reemplazamos por un facade ligero.
+  //
+  // PRECONDICION: el <script async src="https://www.tiktok.com/embed.js">
+  // debe estar removido del template (sino el script descarga 618KB inutilmente).
+  // ===========================================================================
+  function applyTikTokFacades() {
+    var blockquotes = document.querySelectorAll('.w-richtext blockquote.tiktok-embed');
+    blockquotes.forEach(function (blockquote) {
+      var videoId = blockquote.getAttribute('data-video-id');
+      var cite = blockquote.getAttribute('cite') || '';
+      if (!videoId) return;
+
+      var userMatch = cite.match(/@([^\/]+)\//);
+      var username = userMatch ? '@' + userMatch[1] : '@tiktok';
+
+      var rawText = (blockquote.textContent || '').trim();
+      var description = rawText.slice(0, 180);
+      if (rawText.length > 180) description += '…';
+
+      var wrapper = document.createElement('div');
+      wrapper.setAttribute('role', 'button');
+      wrapper.setAttribute('tabindex', '0');
+      wrapper.setAttribute('aria-label', 'Play TikTok video by ' + username);
+      wrapper.style.cssText = [
+        'position:relative',
+        'cursor:pointer',
+        'background:linear-gradient(135deg,#000 0%,#25F4EE 50%,#FE2C55 100%)',
+        'aspect-ratio:9/16',
+        'max-width:325px',
+        'width:100%',
+        'margin:1rem auto',
+        'border-radius:8px',
+        'overflow:hidden',
+        'display:flex',
+        'flex-direction:column',
+        'justify-content:flex-end',
+        'padding:16px',
+        'box-sizing:border-box',
+        'color:#fff',
+        'font-family:-apple-system,system-ui,sans-serif'
+      ].join(';');
+
+      var icon = document.createElement('div');
+      icon.innerHTML = '&#9654;';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:48px;opacity:0.95;pointer-events:none;text-shadow:0 2px 8px rgba(0,0,0,0.4);';
+
+      var userLabel = document.createElement('div');
+      userLabel.textContent = username;
+      userLabel.style.cssText = 'font-weight:700;font-size:16px;margin-bottom:8px;text-shadow:0 1px 4px rgba(0,0,0,0.6);';
+
+      var desc = document.createElement('div');
+      desc.textContent = description;
+      desc.style.cssText = 'font-size:13px;line-height:1.4;text-shadow:0 1px 4px rgba(0,0,0,0.6);max-height:60px;overflow:hidden;';
+
+      var cta = document.createElement('div');
+      cta.textContent = '▶ Play TikTok video';
+      cta.style.cssText = 'margin-top:12px;font-size:13px;font-weight:600;background:rgba(255,255,255,0.15);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:8px 12px;border-radius:6px;text-align:center;';
+
+      wrapper.appendChild(icon);
+      wrapper.appendChild(userLabel);
+      wrapper.appendChild(desc);
+      wrapper.appendChild(cta);
+
+      function activateEmbed() {
+        var realIframe = document.createElement('iframe');
+        realIframe.src = 'https://www.tiktok.com/embed/v2/' + videoId;
+        realIframe.setAttribute('frameborder', '0');
+        realIframe.setAttribute('allow', 'accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+        realIframe.setAttribute('allowfullscreen', '');
+        realIframe.setAttribute('title', 'TikTok video by ' + username);
+        realIframe.style.cssText = 'width:100%;max-width:325px;aspect-ratio:9/16;border:none;display:block;margin:1rem auto;';
+        wrapper.replaceWith(realIframe);
+      }
+
+      wrapper.addEventListener('click', activateEmbed);
+      wrapper.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          activateEmbed();
+        }
+      });
+
+      blockquote.replaceWith(wrapper);
+    });
+  }
+
+  // ===========================================================================
+  // 5. INSTAGRAM FACADE
+  // ===========================================================================
+  // Instagram usa blockquote.instagram-media + script embed.js (~33 KiB)
+  // que escanea el DOM y reemplaza el blockquote por iframe pesado.
+  // Tambien causa CLS porque el iframe final tiene altura distinta al blockquote.
+  //
+  // 1. Removemos el script de embed.js si esta presente
+  // 2. Neutralizamos window.instgrm.Embeds.process() si embed.js ya cargo
+  // 3. Reemplazamos cada blockquote con facade ligero
+  // ===========================================================================
+  function applyInstagramFacades() {
+    // Bloquear embed.js si todavia no se descargo
+    var instagramScripts = document.querySelectorAll('script[src*="instagram.com/embed.js"]');
+    instagramScripts.forEach(function (s) {
+      s.remove();
+    });
+    // Neutralizar si ya esta cargado
+    if (window.instgrm && window.instgrm.Embeds) {
+      window.instgrm.Embeds.process = function () { /* no-op */ };
+    }
+
+    var blockquotes = document.querySelectorAll('blockquote.instagram-media, blockquote.instagram-media-registered');
+    blockquotes.forEach(function (blockquote) {
+      var permalink = blockquote.getAttribute('data-instgrm-permalink');
+      if (!permalink) return;
+
+      var idMatch = permalink.match(/\/p\/([^\/?]+)/) || permalink.match(/\/reel\/([^\/?]+)/);
+      if (!idMatch) return;
+      var postId = idMatch[1];
+      var isReel = permalink.indexOf('/reel/') >= 0;
+
+      var userMatch = permalink.match(/instagram\.com\/([^\/]+)\/(p|reel)\//);
+      var username = userMatch ? '@' + userMatch[1] : '@instagram';
+
+      var wrapper = document.createElement('div');
+      wrapper.setAttribute('role', 'button');
+      wrapper.setAttribute('tabindex', '0');
+      wrapper.setAttribute('aria-label', 'Play Instagram post by ' + username);
+
+      var aspectRatio = isReel ? '9/16' : '1/1';
+      wrapper.style.cssText = [
+        'position:relative',
+        'cursor:pointer',
+        'background:linear-gradient(135deg,#405DE6 0%,#5851DB 25%,#833AB4 50%,#C13584 75%,#E1306C 100%)',
+        'aspect-ratio:' + aspectRatio,
+        'max-width:350px',
+        'width:100%',
+        'margin:1rem auto',
+        'border-radius:8px',
+        'overflow:hidden',
+        'display:flex',
+        'flex-direction:column',
+        'justify-content:flex-end',
+        'padding:16px',
+        'box-sizing:border-box',
+        'color:#fff',
+        'font-family:-apple-system,system-ui,sans-serif'
+      ].join(';');
+
+      var icon = document.createElement('div');
+      icon.innerHTML = '&#9654;';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:48px;opacity:0.95;pointer-events:none;text-shadow:0 2px 8px rgba(0,0,0,0.4);';
+
+      var brand = document.createElement('div');
+      brand.textContent = 'Instagram';
+      brand.style.cssText = 'position:absolute;top:12px;right:14px;font-weight:600;font-size:12px;letter-spacing:0.5px;text-transform:uppercase;text-shadow:0 1px 4px rgba(0,0,0,0.6);opacity:0.95;';
+
+      var userLabel = document.createElement('div');
+      userLabel.textContent = username;
+      userLabel.style.cssText = 'font-weight:700;font-size:16px;margin-bottom:8px;text-shadow:0 1px 4px rgba(0,0,0,0.6);';
+
+      var cta = document.createElement('div');
+      cta.textContent = isReel ? '▶ Play Instagram reel' : '▶ View Instagram post';
+      cta.style.cssText = 'font-size:13px;font-weight:600;background:rgba(255,255,255,0.18);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:8px 12px;border-radius:6px;text-align:center;';
+
+      wrapper.appendChild(brand);
+      wrapper.appendChild(icon);
+      wrapper.appendChild(userLabel);
+      wrapper.appendChild(cta);
+
+      function activateEmbed() {
+        var realIframe = document.createElement('iframe');
+        realIframe.src = 'https://www.instagram.com/' + (isReel ? 'reel' : 'p') + '/' + postId + '/embed/';
+        realIframe.setAttribute('frameborder', '0');
+        realIframe.setAttribute('scrolling', 'no');
+        realIframe.setAttribute('allowtransparency', 'true');
+        realIframe.setAttribute('allowfullscreen', '');
+        realIframe.setAttribute('title', 'Instagram post by ' + username);
+        realIframe.style.cssText = 'width:100%;max-width:350px;aspect-ratio:' + aspectRatio + ';border:none;display:block;margin:1rem auto;background:#fff;';
+        wrapper.replaceWith(realIframe);
+      }
+
+      wrapper.addEventListener('click', activateEmbed);
+      wrapper.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          activateEmbed();
+        }
+      });
+
+      blockquote.replaceWith(wrapper);
+    });
+  }
+
+  // ===========================================================================
+  // ENTRY POINT
+  // ===========================================================================
+  // Con <script defer>, este codigo corre cuando el HTML termino de parsear
+  // pero ANTES de DOMContentLoaded. Eso es ideal: el DOM ya esta listo y
+  // los embeds estan en su estado inicial (antes de que TikTok/Instagram
+  // embed.js los procese, si esos scripts todavia no corrieron).
+  //
+  // Para defensa adicional contra timing issues, escuchamos DOMContentLoaded
+  // y tambien window.load para asegurar que corremos en cualquier escenario.
+  // ===========================================================================
+  function run() {
+    optimizeRichTextImages();
+    applyYoutubeFacades();
+    applyOtherIframeFacades();
+    applyTikTokFacades();
+    applyInstagramFacades();
+  }
+
+  // Si el DOM ya esta listo (defer garantiza esto), correr inmediatamente.
+  // Sino, esperar a DOMContentLoaded.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', run);
+  } else {
+    run();
+  }
+})();

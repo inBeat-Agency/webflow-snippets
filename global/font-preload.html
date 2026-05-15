@@ -1,0 +1,77 @@
+<!--
+  ============================================================================
+  SNIPPET METADATA (machine-readable)
+  ============================================================================
+  applies-to:     /*                       (todo el sitio)
+  scope:          global
+  webflow-target: Designer → Site Settings → Custom Code → Head Code
+  fixes:          render-blocking-resources (parcial), lcp-lazy-loading (parcial)
+  metric-impact:  LCP, FCP
+  status:         active
+  validated:      2026-05-15 en staging (inbeat-agency.webflow.io)
+                    - blog post:   52 -> 77 score, LCP 9.3s -> 3.2s
+                    - service lp:  46 -> 60 score, LCP 12.5s -> 5.0s
+                    - home:        sin mejora atribuible al preload (LCP de
+                                   home depende de Vimeo player + GTM, no de
+                                   font loading)
+  ============================================================================
+
+  Preload de las 2 fuentes custom del sitio (Soehne Buch + Soehne Kraftig)
+  para evitar que el browser las descubra recien despues de parsear el CSS.
+
+  PROBLEMA QUE RESUELVE:
+    Sin preload, el orden de eventos en cold load es:
+      1. HTML llega
+      2. Browser parsea CSS (bloquea render)
+      3. CSS dice "necesito Soehne Buch via @font-face"
+      4. Browser INICIA descarga de la fuente (tarde)
+      5. Con font-display: swap, el H1 se pinta con fallback mientras tanto
+      6. Cuando llega la fuente, swap → repaint
+    El LCP (sobre todo cuando el LCP es texto con fuente custom, como el H1
+    de los blog posts) queda colgando hasta el paso 4-5.
+
+  Con preload, el orden es:
+      1. HTML llega
+      2. Browser ve <link rel="preload" as="font"> en <head> y arranca
+         descarga EN PARALELO con el CSS parse
+      3. Para cuando el CSS pide la fuente, ya esta descargada o casi
+      4. El H1 se pinta directo con la fuente correcta
+    LCP -500ms a -2s en cold loads, sin FOUT visible.
+
+  REQUISITOS PARA QUE FUNCIONE:
+    - crossorigin OBLIGATORIO. Sin esto, el browser descarga 2 veces
+      (una para el preload, otra para el @font-face) y el preload no sirve.
+    - URLs EXACTAS a las del @font-face. Las URLs estan hardcodeadas porque
+      Webflow las hostea con hash inmutable en su CDN (cache-control: 1 anio,
+      last-modified estable desde 2024). Si Webflow llegara a cambiarlas
+      (improbable), Lighthouse va a warnear "preload not used" y hay que
+      actualizar el snippet.
+    - type="font/woff2" aunque el server devuelva application/octet-stream.
+      El browser confia en el type del link, no del response.
+    - DEBE estar en SITE SETTINGS Head Code, no en page-level ni en footer.
+      Cuanto mas arriba del <head>, mas temprano arranca la descarga.
+
+  AUDITS QUE PUEDE TOCAR:
+    - "Preload key requests" del Lighthouse: el preload mismo cumple esta
+      recomendacion.
+    - "Eliminate render-blocking resources": no es un fix directo pero
+      reduce el waterfall.
+
+  COMO VERIFICAR DESPUES DE PUBLICAR:
+    1. DevTools → Network → recargar con cache deshabilitado
+    2. Ver que las dos .woff2 arrancan a descargar en los primeros ~50ms
+       (antes que el CSS termine de parsear)
+    3. NO debe aparecer warning "preload not used within a few seconds"
+       en la consola
+    4. Comparar score Lighthouse mobile antes vs despues
+-->
+<link rel="preload"
+      as="font"
+      type="font/woff2"
+      href="https://cdn.prod.website-files.com/65f9d9d22fb2f3b3f17c09ed/660eb33ac8ad5c7f0efc5aae_soehne-buch.woff2"
+      crossorigin>
+<link rel="preload"
+      as="font"
+      type="font/woff2"
+      href="https://cdn.prod.website-files.com/65f9d9d22fb2f3b3f17c09ed/660eb33afa0c02e8c57c5fe7_soehne-kraftig.woff2"
+      crossorigin>
