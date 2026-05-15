@@ -18,7 +18,7 @@
  * QUE HACE:
  *   1. Lazy load + decoding async en imagenes del rich text
  *   2. fetchpriority="low" en imagenes below-the-fold (mejora LCP)
- *   3. Setea width/height desde naturalWidth/naturalHeight (mitiga unsized-images)
+ *   3. Setea style.aspectRatio desde naturalWidth/naturalHeight (mitiga unsized-images sin pisar el sizing de Webflow)
  *   4. Facade para YouTube (placeholder + iframe on-click)
  *   5. Facade para Vimeo, Loom, Frame.io, LinkedIn, Wistia, Spotify
  *   6. Facade para TikTok (intercepta blockquote antes de que embed.js corra)
@@ -48,11 +48,19 @@
   //   - decoding=async: el browser decodifica off-main-thread, no bloquea render
   //   - fetchpriority=low EN imagenes below-the-fold: desprioriza el download
   //     para que el browser priorice el LCP element
-  //   - width/height desde naturalWidth/naturalHeight: reserva espacio post-load
+  //   - style.aspectRatio desde naturalWidth/naturalHeight: reserva espacio post-load
+  //     sin pisar el width:100% / height:auto que Webflow le da al .w-richtext img
   //
-  // Caveat honesto: setear width/height POST-LOAD no resuelve CLS inicial
+  // Caveat honesto: setear aspect-ratio POST-LOAD no resuelve CLS inicial
   // (el espacio ya se computo mal antes). Solo ayuda a evitar CLS en navegacion
   // interna donde el browser cachea las dimensiones aprendidas.
+  //
+  // Historia (v1.0.0): originalmente seteabamos los atributos HTML width/height
+  // con las dimensiones naturales. Eso rompia el sizing en blog posts donde el
+  // HTML inicial traia width="100%" como atributo: el script no podia setear
+  // width (ya estaba), pero si seteaba height=<naturalHeight> en px, y el browser
+  // interpretaba height como px fijos -> imagenes estiradas vertical. Fixed en
+  // v1.0.1 usando style.aspectRatio.
   // ===========================================================================
   function optimizeRichTextImages() {
     var images = document.querySelectorAll('.w-richtext img');
@@ -71,7 +79,12 @@
         img.setAttribute('fetchpriority', 'low');
       }
 
-      // Setear width/height desde natural si ya cargo, o cuando cargue
+      // Reservar espacio via CSS aspect-ratio (no via atributos width/height).
+      // Usar atributos pisaba el sizing de Webflow (.w-richtext img tiene
+      // width:100%; height:auto) cuando el HTML traia width="100%" como
+      // atributo: el script seteaba height="<naturalHeight>" como px fijos
+      // y la imagen quedaba estirada vertical. Con aspect-ratio en style,
+      // reservamos espacio para CLS sin tocar el flujo de sizing del CSS.
       if (img.complete && img.naturalWidth > 0) {
         applyNaturalDimensions(img);
       } else {
@@ -83,12 +96,12 @@
   }
 
   function applyNaturalDimensions(img) {
-    // Solo seteamos si no estan ya definidos
-    if (!img.getAttribute('width') && img.naturalWidth > 0) {
-      img.setAttribute('width', img.naturalWidth);
-    }
-    if (!img.getAttribute('height') && img.naturalHeight > 0) {
-      img.setAttribute('height', img.naturalHeight);
+    if (
+      img.naturalWidth > 0 &&
+      img.naturalHeight > 0 &&
+      !img.style.aspectRatio
+    ) {
+      img.style.aspectRatio = img.naturalWidth + ' / ' + img.naturalHeight;
     }
   }
 

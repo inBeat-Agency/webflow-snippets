@@ -4,6 +4,32 @@ Todos los cambios significativos a este repo se documentan aca.
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versionado [SemVer](https://semver.org/).
 
+## [v1.0.1] — 2026-05-15
+
+### Fixed
+
+#### `blog/rich-text-performance.js` — imagenes estiradas vertical
+
+`applyNaturalDimensions` seteaba los atributos HTML `width` y `height` con las dimensiones intrinsecas de cada imagen (ej: `width="2400" height="1600"`). En blog posts donde el HTML inicial traia `width="100%"` como atributo, la condicion `if (!img.getAttribute('width'))` evitaba pisar width, pero `height` SI se seteaba como px fijos. Resultado: el browser interpretaba `height` como altura literal y las imagenes quedaban estiradas vertical, ignorando el `height: auto` del CSS.
+
+Fix: reemplazar los atributos `width`/`height` por `style.aspectRatio = naturalWidth / naturalHeight`. Reserva el espacio para CLS sin pisar el sizing nativo de Webflow (`.w-richtext img { width: 100%; height: auto }`).
+
+### Migration
+
+Actualizar la linea del `<script src>` en los templates de Webflow (Blog Post Template y Author Template):
+
+```html
+<!-- antes -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.0/blog/rich-text-performance.js" defer></script>
+
+<!-- despues -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.1/blog/rich-text-performance.js" defer></script>
+```
+
+Republicar el site. jsDelivr puede tardar unos minutos en propagar el nuevo tag.
+
+[v1.0.1]: https://github.com/inBeat-Agency/webflow-snippets/releases/tag/v1.0.1
+
 ## [v1.0.0] — 2026-05-15
 
 ### Added
