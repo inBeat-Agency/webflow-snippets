@@ -4,6 +4,20 @@ Todos los cambios significativos a este repo se documentan aca.
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versionado [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+#### `docs/webflow-patterns/collection-list-image-sizing.md`
+
+Documentacion de patron NO-snippet: como resolver CLS en Collection Lists con imagenes `width="auto"` / `height="auto"`. Aplicado en Blog Author Category (10 URLs) y Blog Listing (5 URLs) el 2026-05-18.
+
+Resultados validados:
+- Blog Author Category — CLS 0.566 → 0.010 mobile, score +14 promedio
+- Blog Listing + paginacion — CLS 0.304 → 0.012 mobile, score +30 promedio
+
+No requiere release de tag — es documentacion de configuracion en Webflow Designer, no codigo servido por jsDelivr.
+
 ## [v1.0.1] — 2026-05-15
 
 ### Fixed
