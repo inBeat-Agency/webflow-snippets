@@ -18,6 +18,44 @@ Resultados validados:
 
 No requiere release de tag — es documentacion de configuracion en Webflow Designer, no codigo servido por jsDelivr.
 
+## [v1.0.3] — 2026-05-26
+
+### Fixed
+
+#### `blog/rich-text-performance.js` — thumbnails Vimeo pixelados y videos verticales aplastados
+
+Dos bugs encontrados despues de publicar v1.0.2 al verificar el facade de Vimeo en `/blog/marketing-agency-metrics-guide`:
+
+**Bug 1: thumbnails Vimeo pixelados.** `fetchVimeoThumb` pedia el oEmbed sin especificar `width`, lo que hacia que Vimeo devolviera la version mas chica del thumbnail disponible (`..._200x150` ~200px de ancho). Renderizado en un wrapper de 700+px en desktop, el thumbnail se veia con upscale de 3.5x — pixelado y borroso.
+
+Fix: agregar `&width=1280` al request oEmbed. Vimeo responde con `..._1280` (~1280px), nitido en desktop con DPR=2.
+
+**Bug 2: videos verticales aplastados.** `getProviderInfo` retornaba `ratio: '16/9'` fijo para todos los Vimeos. Pero un porcentaje significativo de embeds modernos son verticales (formato Reels/Stories/Shorts, 9:16). El wrapper 16/9 + `object-fit: cover` recortaba arriba y abajo, deformando el encuadre. Ejemplos en el sitio: hooks UGC del post `marketing-agency-metrics-guide` que son 240x426 (9:16).
+
+Fix: cambiar `ratio` a `null` en `getProviderInfo` para Vimeo. La nueva funcion `fetchVimeoMetadata` (rename de `fetchVimeoThumb`) ahora extrae tambien `width`/`height` del response del oEmbed y devuelve el ratio real del video. El wrapper arranca con `16/9` placeholder y se ajusta cuando llega el oEmbed (~200ms). Mini-CLS aceptado por la mejora visual mayor.
+
+Tambien: cambiar `object-fit: cover` a `contain` en el thumbnail. Cuando el ratio del wrapper coincide con el del thumbnail (caso normal post-oEmbed), ambos dan el mismo resultado. Durante el periodo placeholder (~200ms con ratio 16/9 antes que llegue el real), `contain` evita recortar agresivamente verticales mientras se ajusta el wrapper.
+
+### Migration
+
+Actualizar la linea del `<script src>` en los templates de Webflow (Blog Post Template, Author Template):
+
+```html
+<!-- antes -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.2/blog/rich-text-performance.js" defer></script>
+
+<!-- despues -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.3/blog/rich-text-performance.js" defer></script>
+```
+
+Republicar el site. jsDelivr puede tardar unos minutos en propagar el nuevo tag.
+
+### Internals
+
+- Rename: `fetchVimeoThumb(src, cb)` → `fetchVimeoMetadata(src, cb)`. Callback ahora recibe `{ thumbUrl, ratio }` en vez de solo el URL del thumbnail.
+
+[v1.0.3]: https://github.com/inBeat-Agency/webflow-snippets/releases/tag/v1.0.3
+
 ## [v1.0.2] — 2026-05-26
 
 ### Fixed

@@ -183,7 +183,10 @@
     try {
       var url = new URL(src);
       var host = url.hostname.replace(/^www\./, '');
-      if (host.indexOf('vimeo.com') >= 0) return { name: 'Vimeo', ratio: '16/9', supportsThumb: true };
+      // Vimeo: ratio NO fijo. Se deriva del oEmbed response (width/height del video real).
+      // Esto cubre videos verticales (Reels-style 9:16), cuadrados, etc. Sin esto, videos
+      // verticales se aplastan en una caja 16/9 con object-fit: cover destruyendo el encuadre.
+      if (host.indexOf('vimeo.com') >= 0) return { name: 'Vimeo', ratio: null, supportsThumb: true };
       if (host.indexOf('linkedin.com') >= 0) return { name: 'LinkedIn', ratio: null, supportsThumb: false };
       if (host.indexOf('loom.com') >= 0) return { name: 'Loom', ratio: '16/9', supportsThumb: false };
       if (host.indexOf('frame.io') >= 0) return { name: 'Frame.io', ratio: '16/9', supportsThumb: false };
@@ -201,11 +204,31 @@
     }
   }
 
-  function fetchVimeoThumb(src, callback) {
-    var oembedUrl = 'https://vimeo.com/api/oembed.json?url=' + encodeURIComponent(src);
+  function fetchVimeoMetadata(src, callback) {
+    // Pedir oEmbed con `width=1280` para que el thumbnail venga en HD. Sin esto
+    // Vimeo devuelve la version mas chica (~200x150) que renderizada a 700+px se
+    // pixela y el `object-fit: cover` destruye el encuadre cuando el ratio del
+    // thumbnail no coincide con el del wrapper.
+    //
+    // Tambien devolvemos width/height del video real (response.width/.height) para
+    // que el wrapper use el ratio correcto. Caso comun: Reels-style verticales
+    // (ej: 240x426, 9:16) que con el viejo wrapper 16/9 + object-fit:cover quedaban
+    // recortados y aplastados.
+    //
+    // Callback recibe { thumbUrl, ratio } o null si fallo el fetch. Ratio es string
+    // tipo "16/9" o "9/16" listo para CSS, derivado del response. Si el video es
+    // privado/unlisted, oEmbed funciona si el caller pasa la URL completa con `?h=`.
+    var oembedUrl = 'https://vimeo.com/api/oembed.json?url=' + encodeURIComponent(src) + '&width=1280';
     fetch(oembedUrl)
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (data) { callback(data && data.thumbnail_url ? data.thumbnail_url : null); })
+      .then(function (data) {
+        if (!data) { callback(null); return; }
+        var ratio = null;
+        if (data.width > 0 && data.height > 0) {
+          ratio = data.width + '/' + data.height;
+        }
+        callback({ thumbUrl: data.thumbnail_url || null, ratio: ratio });
+      })
       .catch(function () { callback(null); });
   }
 
@@ -218,19 +241,27 @@
       var provider = getProviderInfo(src);
 
       // Resolver aspect-ratio del wrapper:
-      //   1. Provider con ratio fijo (Vimeo, Loom, Google Drive, etc): usarlo
-      //   2. Sin ratio fijo: derivar de width/height del iframe original SOLO si son
-      //      numericos puros (sin "%", "em", etc). parseInt("100%") devuelve 100,
-      //      lo que producia ratios destruyendo el layout (ver v1.0.2 fix).
-      //   3. Fallback: 16/9 (mas seguro que romper el layout con un ratio invalido)
+      //   1. Provider con ratio fijo (Loom, Google Drive, etc): usarlo directo.
+      //   2. Provider con ratio dinamico (Vimeo): empezar con 16/9 placeholder y dejar
+      //      que fetchVimeoMetadata lo corrija cuando llegue el oEmbed. Hay un mini-CLS
+      //      potencial al cambiar (~200ms) pero el fondo negro hace el ajuste discreto.
+      //   3. Sin info de provider: derivar de width/height del iframe original SOLO si son
+      //      numericos puros (sin "%", "em", etc). parseInt("100%") devuelve 100, lo que
+      //      producia ratios destruyendo el layout (ver v1.0.2 fix).
+      //   4. Fallback final: 16/9 (mas seguro que romper el layout con un ratio invalido).
       var wrapperRatio = provider.ratio;
       if (!wrapperRatio) {
-        var wAttr = iframe.getAttribute('width');
-        var hAttr = iframe.getAttribute('height');
-        var w = /^\d+$/.test(wAttr || '') ? parseInt(wAttr, 10) : NaN;
-        var h = /^\d+$/.test(hAttr || '') ? parseInt(hAttr, 10) : NaN;
-        if (w > 0 && h > 0) wrapperRatio = w + '/' + h;
-        else wrapperRatio = '16/9';
+        // Para Vimeo el ratio real llega async via oEmbed. Usar 16/9 temporal.
+        if (provider.name === 'Vimeo') {
+          wrapperRatio = '16/9';
+        } else {
+          var wAttr = iframe.getAttribute('width');
+          var hAttr = iframe.getAttribute('height');
+          var w = /^\d+$/.test(wAttr || '') ? parseInt(wAttr, 10) : NaN;
+          var h = /^\d+$/.test(hAttr || '') ? parseInt(hAttr, 10) : NaN;
+          if (w > 0 && h > 0) wrapperRatio = w + '/' + h;
+          else wrapperRatio = '16/9';
+        }
       }
 
       // Preservar TODOS los atributos del iframe original
@@ -256,17 +287,29 @@
         'justify-content:center'
       ].join(';');
 
-      // Thumbnail solo Vimeo (oEmbed publico)
+      // Thumbnail + ratio dinamico solo Vimeo (oEmbed publico).
+      // fetchVimeoMetadata pide thumbnail HD (width=1280) y devuelve tambien el ratio
+      // real del video, para que el wrapper se ajuste si es vertical/cuadrado.
       var thumb = null;
       if (provider.supportsThumb) {
         thumb = document.createElement('img');
         thumb.alt = provider.name + ' thumbnail';
         thumb.setAttribute('loading', 'lazy');
         thumb.setAttribute('decoding', 'async');
-        thumb.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;';
+        // object-fit: contain en vez de cover. Con el ratio del wrapper igual al ratio
+        // del video, ambos dan el mismo resultado. Mientras llega el oEmbed con el ratio
+        // real (skeleton 16/9), contain evita recortar agresivamente videos verticales.
+        thumb.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;';
         wrapper.appendChild(thumb);
-        fetchVimeoThumb(src, function (thumbUrl) {
-          if (thumbUrl) thumb.src = thumbUrl;
+        fetchVimeoMetadata(src, function (meta) {
+          if (!meta) return;
+          if (meta.thumbUrl) thumb.src = meta.thumbUrl;
+          if (meta.ratio) {
+            // Ajustar el wrapper al ratio real del video. Si era vertical (9:16) la altura
+            // sube respecto al placeholder 16/9 inicial. Es un CLS pequeno aceptado para
+            // resolver el problema mayor de aplastamiento.
+            wrapper.style.aspectRatio = meta.ratio;
+          }
         });
       }
 
