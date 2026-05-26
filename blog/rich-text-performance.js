@@ -175,8 +175,8 @@
   // ===========================================================================
   // Estrategia comun:
   //   - Detectar provider por hostname
-  //   - Vimeo: thumbnail real via oEmbed (API publica)
-  //   - Resto: placeholder con titulo del iframe o nombre del provider
+  //   - Vimeo: pedir oEmbed solo para obtener el ratio real del video (no thumb)
+  //   - Todos: placeholder negro + play button circular blanco grande, sin texto
   //   - Preservar TODOS los atributos del iframe original al activar
   // ===========================================================================
   function getProviderInfo(src) {
@@ -184,9 +184,13 @@
       var url = new URL(src);
       var host = url.hostname.replace(/^www\./, '');
       // Vimeo: ratio NO fijo. Se deriva del oEmbed response (width/height del video real).
-      // Esto cubre videos verticales (Reels-style 9:16), cuadrados, etc. Sin esto, videos
-      // verticales se aplastan en una caja 16/9 con object-fit: cover destruyendo el encuadre.
-      if (host.indexOf('vimeo.com') >= 0) return { name: 'Vimeo', ratio: null, supportsThumb: true };
+      // Esto cubre videos verticales (Reels-style 9:16), cuadrados, etc.
+      //
+      // supportsThumb: false desde v1.0.6 — Vimeo entrega thumbs zoomeados en la cara para
+      // videos verticales UGC/selfie, que visualmente se ven "cortados" (sin pelo arriba/sin
+      // hombros abajo). Como el thumb es decision de Vimeo y no podemos pedir uno distinto,
+      // optamos por placeholder negro + play button grande (mas neutral y profesional).
+      if (host.indexOf('vimeo.com') >= 0) return { name: 'Vimeo', ratio: null, supportsThumb: false };
       if (host.indexOf('linkedin.com') >= 0) return { name: 'LinkedIn', ratio: null, supportsThumb: false };
       if (host.indexOf('loom.com') >= 0) return { name: 'Loom', ratio: '16/9', supportsThumb: false };
       if (host.indexOf('frame.io') >= 0) return { name: 'Frame.io', ratio: '16/9', supportsThumb: false };
@@ -278,7 +282,9 @@
       wrapper.style.cssText = [
         'position:relative',
         'cursor:pointer',
-        'background:#1a1a1a',
+        // Fondo negro profundo. Mas oscuro que el #1a1a1a anterior para que el play
+        // button blanco translucido resalte mejor.
+        'background:#0a0a0a',
         'aspect-ratio:' + wrapperRatio,
         'width:100%',
         'overflow:hidden',
@@ -287,68 +293,101 @@
         'justify-content:center'
       ].join(';');
 
-      // Thumbnail + ratio dinamico solo Vimeo (oEmbed publico).
-      // fetchVimeoMetadata pide thumbnail HD (width=1280) y devuelve tambien el ratio
-      // real del video, para que el wrapper se ajuste si es vertical/cuadrado.
-      var thumb = null;
-      if (provider.supportsThumb) {
-        thumb = document.createElement('img');
-        thumb.alt = provider.name + ' thumbnail';
-        thumb.setAttribute('loading', 'lazy');
-        thumb.setAttribute('decoding', 'async');
-        // object-fit: contain en vez de cover. Con el ratio del wrapper igual al ratio
-        // del video, ambos dan el mismo resultado. Mientras llega el oEmbed con el ratio
-        // real (skeleton 16/9), contain evita recortar agresivamente videos verticales.
-        thumb.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;';
-        wrapper.appendChild(thumb);
+      // Para Vimeo SIEMPRE pedimos oEmbed (aunque no usemos el thumb) para obtener el
+      // ratio real del video y ajustar el wrapper. fetchVimeoMetadata devuelve tanto el
+      // thumbUrl como el ratio — ignoramos thumbUrl porque desde v1.0.6 no mostramos thumb.
+      //
+      // IMPORTANTE: el HTML que Webflow inserta automaticamente para iframes envuelve el
+      // facade en `<div style="padding-bottom: 56.25%; height: 0; overflow: hidden">` que
+      // fuerza un aspect-ratio 16/9. Si el video es vertical, el facade se renderiza pero
+      // queda RECORTADO por el overflow:hidden del padre. Hay que ajustar tambien ese
+      // contenedor para que respete el ratio real del video.
+      if (provider.name === 'Vimeo') {
         fetchVimeoMetadata(src, function (meta) {
-          if (!meta) return;
-          if (meta.thumbUrl) thumb.src = meta.thumbUrl;
-          if (meta.ratio) {
-            // Ajustar el wrapper al ratio real del video. Si era vertical (9:16) la altura
-            // sube respecto al placeholder 16/9 inicial. Es un CLS pequeno aceptado para
-            // resolver el problema mayor de aplastamiento.
-            wrapper.style.aspectRatio = meta.ratio;
+          if (!meta || !meta.ratio) return;
 
-            // Caso especial verticales (h > w): width:100% en un container de 700px daria
-            // un wrapper de ~1250px de alto, mas alto que el viewport. Limitar la altura
-            // a 60vh y dejar que el width se ajuste para mantener el ratio, centrado
-            // horizontalmente. Para horizontales/cuadrados el wrapper queda como estaba
-            // (width:100%, sin maxHeight).
-            //
-            // 60vh elegido despues de probar 80vh (todavia se sentia "demasiado grande"
-            // segun feedback del usuario en marketing-agency-metrics-guide). 60vh deja al
-            // lector ver mas contexto del blog post arriba y abajo del video, manteniendo
-            // el video lo bastante grande para identificar contenido a primera vista.
-            var parts = meta.ratio.split('/');
-            var vw = parseInt(parts[0], 10);
-            var vh = parseInt(parts[1], 10);
-            if (vh > vw) {
-              wrapper.style.maxHeight = '60vh';
-              wrapper.style.width = 'auto';
-              wrapper.style.margin = '0 auto';
+          var parts = meta.ratio.split('/');
+          var vw = parseInt(parts[0], 10);
+          var vh = parseInt(parts[1], 10);
+          if (!(vw > 0) || !(vh > 0)) return;
+
+          // Ajustar el wrapper al ratio real del video.
+          wrapper.style.aspectRatio = meta.ratio;
+
+          // Caso especial verticales (h > w): width:100% en un container de 700px daria
+          // un wrapper de ~1250px de alto, mas alto que el viewport. Limitar la altura
+          // a 60vh y dejar que el width se ajuste para mantener el ratio, centrado.
+          // Tambien hay que LIBERAR al div padre con padding-bottom:56.25% (Webflow inserta
+          // ese wrapping automaticamente para iframes) — sino el facade vertical queda
+          // recortado por el overflow:hidden.
+          if (vh > vw) {
+            wrapper.style.maxHeight = '60vh';
+            wrapper.style.width = 'auto';
+            wrapper.style.margin = '0 auto';
+
+            // Liberar el div padre de Webflow si tiene padding-bottom forzado a 16:9.
+            // Heuristica: buscar el padre INMEDIATO con padding-bottom en pct (Webflow lo
+            // inserta justo arriba del iframe). Quitar el padding-bottom y altura cero.
+            var parent = wrapper.parentElement;
+            if (parent && parent.style && parent.style.paddingBottom &&
+                parent.style.paddingBottom.indexOf('%') !== -1) {
+              parent.style.paddingBottom = '0';
+              parent.style.height = 'auto';
+              // overflow:hidden se mantiene; no afecta porque ya no hay restriccion de altura
             }
           }
         });
       }
 
-      // Overlay con icono play + label
-      var overlay = document.createElement('div');
-      overlay.style.cssText = 'position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:8px;color:#fff;text-align:center;padding:16px;';
+      // Play button — desde v1.0.6 el design es mas minimal: circulo blanco translucido
+      // grande con icono triangular adentro, sin label de texto. Funciona sobre fondo
+      // negro del wrapper (sin thumb) o sobre cualquier thumbnail si el provider lo trae.
+      // Hover state via inline CSS (un poco awkward sin clases pero el snippet no inyecta
+      // <style> para no chocar con CSS del cliente).
+      var playButton = document.createElement('div');
+      playButton.setAttribute('aria-hidden', 'true');
+      playButton.style.cssText = [
+        'position:relative',
+        'z-index:1',
+        'width:80px',
+        'height:80px',
+        'border-radius:50%',
+        'background:rgba(255,255,255,0.25)',
+        'backdrop-filter:blur(4px)',
+        '-webkit-backdrop-filter:blur(4px)',
+        'border:2px solid rgba(255,255,255,0.6)',
+        'display:flex',
+        'align-items:center',
+        'justify-content:center',
+        'transition:transform 0.2s ease, background 0.2s ease',
+        'box-shadow:0 4px 24px rgba(0,0,0,0.4)'
+      ].join(';');
 
+      // Icono play: triangulo via clip-path para tener forma limpia (no caracter unicode
+      // que depende de la fuente del sistema). Ligero offset a la derecha para que se
+      // perciba visualmente centrado dentro del circulo.
       var playIcon = document.createElement('div');
-      playIcon.innerHTML = '&#9654;';
-      playIcon.setAttribute('aria-hidden', 'true');
-      playIcon.style.cssText = 'font-size:42px;background:rgba(0,0,0,0.5);width:72px;height:50px;border-radius:8px;display:flex;align-items:center;justify-content:center;text-shadow:0 1px 4px rgba(0,0,0,0.6);';
+      playIcon.style.cssText = [
+        'width:0',
+        'height:0',
+        'border-left:22px solid #fff',
+        'border-top:14px solid transparent',
+        'border-bottom:14px solid transparent',
+        'margin-left:6px'
+      ].join(';');
+      playButton.appendChild(playIcon);
 
-      var label = document.createElement('div');
-      var titleAttr = iframe.getAttribute('title');
-      label.textContent = titleAttr ? titleAttr : ('Play ' + provider.name);
-      label.style.cssText = 'font-size:14px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,0.6);max-width:280px;';
+      // Hover: agrandar levemente y aumentar opacidad del fondo
+      wrapper.addEventListener('mouseenter', function () {
+        playButton.style.transform = 'scale(1.1)';
+        playButton.style.background = 'rgba(255,255,255,0.4)';
+      });
+      wrapper.addEventListener('mouseleave', function () {
+        playButton.style.transform = 'scale(1)';
+        playButton.style.background = 'rgba(255,255,255,0.25)';
+      });
 
-      overlay.appendChild(playIcon);
-      overlay.appendChild(label);
-      wrapper.appendChild(overlay);
+      wrapper.appendChild(playButton);
 
       function activateEmbed() {
         var realIframe = document.createElement('iframe');

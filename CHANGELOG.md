@@ -18,6 +18,46 @@ Resultados validados:
 
 No requiere release de tag — es documentacion de configuracion en Webflow Designer, no codigo servido por jsDelivr.
 
+## [v1.0.6] — 2026-05-26
+
+### Changed
+
+#### `blog/rich-text-performance.js` — placeholder Vimeo: sin thumbnail, play button mejorado, padre Webflow liberado
+
+Tres cambios coordinados a partir del feedback final del usuario en `/blog/marketing-agency-metrics-guide`:
+
+**1. Eliminar el thumbnail de Vimeo**
+
+`supportsThumb: false` para Vimeo en `getProviderInfo`. Razon: Vimeo genera thumbs zoomeados en la cara para videos verticales UGC/selfie, que visualmente se ven "cortados" (sin pelo arriba/sin hombros abajo). Como ese encuadre es decision de Vimeo y no podemos pedir uno diferente, optamos por placeholder negro consistente. Los Vimeos siguen llamando a `fetchVimeoMetadata` para obtener el ratio real del video — solo ignoramos el `thumbUrl` del response.
+
+**2. Play button rediseñado**
+
+Reemplazado el play icon + label de texto por un boton circular blanco translucido grande (80x80px) con:
+- `background: rgba(255,255,255,0.25)` + `backdrop-filter: blur(4px)` para efecto glass
+- Borde blanco semitransparente
+- Triangulo play hecho con bordes CSS (no caracter Unicode dependiente de la fuente del sistema)
+- Sombra suave para profundidad
+- Hover: escala 1.1x + opacidad mayor (transition 0.2s)
+- Sin label de texto: el contexto del parrafo arriba del video ya explica que es
+
+**3. Liberar el padre wrapping de Webflow**
+
+DESCUBRIMIENTO IMPORTANTE durante esta auditoria: Webflow inserta automaticamente un wrapping div con `padding-bottom: 56.25%` (16:9) alrededor de cada iframe en `.w-embed.w-iframe`. Eso forzaba el facade a 16:9 incluso cuando el snippet aplicaba `aspect-ratio` vertical al wrapper, porque el padre tiene `overflow:hidden`. Resultado: el facade vertical se renderizaba pero quedaba RECORTADO a la altura del padre 16:9.
+
+Fix: cuando detectamos que el video es vertical (h > w), tambien limpiar el `padding-bottom` y `height` del padre directo si tiene esos atributos como `%`. Esto es lo que permite finalmente que verticales se vean en su ratio real sin recortes.
+
+### Migration
+
+```html
+<!-- antes -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.5/blog/rich-text-performance.js" defer></script>
+
+<!-- despues -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.6/blog/rich-text-performance.js" defer></script>
+```
+
+[v1.0.6]: https://github.com/inBeat-Agency/webflow-snippets/releases/tag/v1.0.6
+
 ## [v1.0.5] — 2026-05-26
 
 ### Changed
