@@ -189,6 +189,12 @@
       if (host.indexOf('frame.io') >= 0) return { name: 'Frame.io', ratio: '16/9', supportsThumb: false };
       if (host.indexOf('wistia.') >= 0 || host.indexOf('wistia.net') >= 0) return { name: 'Wistia', ratio: '16/9', supportsThumb: false };
       if (host.indexOf('spotify.com') >= 0) return { name: 'Spotify', ratio: null, supportsThumb: false };
+      // Google Drive / Docs / Slides — los embeds suelen venir con `width="100%"` que
+      // rompe el calculo de ratio (parseInt("100%") -> 100). Fijar 16/9 como default
+      // razonable; para PDFs verticales el usuario puede pegar el iframe con width/height
+      // numericos explicitos si necesita un ratio distinto.
+      if (host.indexOf('drive.google.com') >= 0) return { name: 'Google Drive', ratio: '16/9', supportsThumb: false };
+      if (host.indexOf('docs.google.com') >= 0) return { name: 'Google Docs', ratio: '16/9', supportsThumb: false };
       return { name: 'Embed', ratio: null, supportsThumb: false };
     } catch (e) {
       return { name: 'Embed', ratio: null, supportsThumb: false };
@@ -212,13 +218,17 @@
       var provider = getProviderInfo(src);
 
       // Resolver aspect-ratio del wrapper:
-      //   1. Provider con ratio fijo (Vimeo, Loom, etc): usarlo
-      //   2. Sin ratio fijo: derivar de width/height del iframe original
-      //   3. Fallback: 16/9
+      //   1. Provider con ratio fijo (Vimeo, Loom, Google Drive, etc): usarlo
+      //   2. Sin ratio fijo: derivar de width/height del iframe original SOLO si son
+      //      numericos puros (sin "%", "em", etc). parseInt("100%") devuelve 100,
+      //      lo que producia ratios destruyendo el layout (ver v1.0.2 fix).
+      //   3. Fallback: 16/9 (mas seguro que romper el layout con un ratio invalido)
       var wrapperRatio = provider.ratio;
       if (!wrapperRatio) {
-        var w = parseInt(iframe.getAttribute('width'), 10);
-        var h = parseInt(iframe.getAttribute('height'), 10);
+        var wAttr = iframe.getAttribute('width');
+        var hAttr = iframe.getAttribute('height');
+        var w = /^\d+$/.test(wAttr || '') ? parseInt(wAttr, 10) : NaN;
+        var h = /^\d+$/.test(hAttr || '') ? parseInt(hAttr, 10) : NaN;
         if (w > 0 && h > 0) wrapperRatio = w + '/' + h;
         else wrapperRatio = '16/9';
       }

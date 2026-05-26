@@ -18,6 +18,47 @@ Resultados validados:
 
 No requiere release de tag — es documentacion de configuracion en Webflow Designer, no codigo servido por jsDelivr.
 
+## [v1.0.2] — 2026-05-26
+
+### Fixed
+
+#### `blog/rich-text-performance.js` — embeds estirados con altura monstruosa
+
+`applyOtherIframeFacades` calculaba el aspect-ratio del wrapper haciendo `parseInt(iframe.getAttribute('width'), 10)`. Cuando un iframe traia `width="100%"` (caso comun en embeds de Google Drive, Slides, Canva, Notion, etc), `parseInt("100%", 10)` retornaba `100` — un valor relativo interpretado como ancho de ratio. El snippet armaba entonces `aspect-ratio: 100/480` para un iframe Google Drive con `width="100%" height="480"`, lo que producia un facade de **704 × 3379 px** en desktop / **371 × 1780 px** en mobile.
+
+Visualmente: un muro gris vacio ocupando casi 2 viewports verticales en medio del blog post. Reproducido en `/blog/marketing-agency-metrics-guide`.
+
+Fix:
+1. Validar que `width` y `height` sean numericos puros con regex `/^\d+$/` antes de usarlos como ratio. Si no lo son, cae al fallback `16/9`.
+2. Agregar `drive.google.com` y `docs.google.com` a `getProviderInfo` con ratio fijo `16/9` para evitar la rama del calculo derivado.
+
+Casos cubiertos por el fix:
+- `width="100%"` → cae a `16/9` (antes: `100/<h>` roto)
+- `width="auto"` → cae a `16/9` (antes: `NaN/NaN` → roto)
+- `width="200px"` → cae a `16/9` (antes: `200/<h>` → "200/" es valido pero el `px` engana, ahora se rechaza explicitamente)
+- `width="560" height="315"` → `560/315` (sigue funcionando, YouTube clasico)
+- Iframes de Google Drive/Docs → `16/9` fijo via `getProviderInfo`
+
+### Migration
+
+Actualizar la linea del `<script src>` en los templates de Webflow (Blog Post Template y Author Template):
+
+```html
+<!-- antes -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.1/blog/rich-text-performance.js" defer></script>
+
+<!-- despues -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.2/blog/rich-text-performance.js" defer></script>
+```
+
+Republicar el site. jsDelivr puede tardar unos minutos en propagar el nuevo tag.
+
+### Notes
+
+Esto NO resuelve la limitacion conocida de iframes hardcoded en rich text (ver README v1.0.0 "Limitacion conocida"). El snippet sigue reemplazando iframes despues del HTML parse, lo que significa que las descargas iniciales de player scripts (YouTube, Vimeo, etc) ya empezaron antes de que el facade se aplique. Para resolver eso se necesita un snippet inline en `<head>` con MutationObserver — pendiente para v1.1.0+.
+
+[v1.0.2]: https://github.com/inBeat-Agency/webflow-snippets/releases/tag/v1.0.2
+
 ## [v1.0.1] — 2026-05-15
 
 ### Fixed
