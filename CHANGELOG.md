@@ -18,6 +18,44 @@ Resultados validados:
 
 No requiere release de tag — es documentacion de configuracion en Webflow Designer, no codigo servido por jsDelivr.
 
+## [v1.0.9] — 2026-05-26
+
+### Fixed
+
+#### `blog/rich-text-performance.js` — LinkedIn (y otros) verticales sin tratamiento de tamaño
+
+Bug detectado en `/blog/b2b-saas-marketing-strategies`: los embeds de LinkedIn con ratio vertical (504/896 y 504/726 para reels reposteados) se renderizaban como wrappers GIGANTES (704x1252 px y 704x1014 px) que dominaban toda la pantalla.
+
+**Causa**: el tratamiento de "verticales chicos" (`max-height: 60vh + width: auto + margin: 0 auto`) que aplicamos en v1.0.4-v1.0.6 era exclusivo para Vimeo. Cualquier otro provider con ratio vertical (LinkedIn reels, Wistia vertical, embeds con dimensiones verticales en el iframe original) quedaba sin el tratamiento.
+
+**Fix**: extraida la logica de sizing vertical a un helper `applyVerticalSizingIfNeeded(ratioStr)` que se ejecuta para CUALQUIER wrapper recien creado en `applyOtherIframeFacades`. Si el ratio es vertical (h > w), aplica:
+- `max-height: 60vh` (limita altura)
+- `width: auto` (ancho derivado del ratio)
+- `margin: 0 auto` (centrado horizontal)
+- Libera el padre wrapping de Webflow (`padding-bottom: 0; height: auto`) si tenia padding-bottom forzado
+
+Para Vimeo el helper se ejecuta TANTO con el ratio placeholder inicial 16:9 (no aplica nada) COMO con el ratio real que llega del oEmbed async (aplica si vertical). Para LinkedIn/Wistia/etc el helper se ejecuta sincrono con el ratio derivado del iframe original.
+
+Resultado en `/blog/b2b-saas-marketing-strategies`:
+- LinkedIn #0: 704x1252 → **304x540** (60vh)
+- LinkedIn #2: 704x1014 → **375x540** (60vh)
+
+### Migration
+
+```html
+<!-- antes -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.8/blog/rich-text-performance.js" defer></script>
+
+<!-- despues -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.9/blog/rich-text-performance.js" defer></script>
+```
+
+### Note: LinkedIn requiere 2 clicks para reproducir
+
+Esto NO es un bug del snippet — es comportamiento de LinkedIn. El primer click sobre el facade activa el iframe LinkedIn (carga el embed y muestra el preview del post). El segundo click sobre el play button dentro del embed reproduce el video. LinkedIn requiere esto para todos sus embeds, no podemos cambiar eso desde el snippet.
+
+[v1.0.9]: https://github.com/inBeat-Agency/webflow-snippets/releases/tag/v1.0.9
+
 ## [v1.0.8] — 2026-05-26
 
 ### Changed

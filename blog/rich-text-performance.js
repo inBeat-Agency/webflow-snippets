@@ -388,49 +388,48 @@
         'justify-content:center'
       ].join(';');
 
-      // Para Vimeo SIEMPRE pedimos oEmbed (aunque no usemos el thumb) para obtener el
-      // ratio real del video y ajustar el wrapper. fetchVimeoMetadata devuelve tanto el
-      // thumbUrl como el ratio — ignoramos thumbUrl porque desde v1.0.6 no mostramos thumb.
+      // Helper: si el ratio resulta vertical (h > w), aplicar sizing especial para que el
+      // facade no ocupe todo el viewport. max-height 60vh + width auto + centrado. Tambien
+      // libera al padre wrapping de Webflow (padding-bottom:56.25%) si existe — sino el
+      // facade vertical queda recortado por overflow:hidden del padre.
       //
-      // IMPORTANTE: el HTML que Webflow inserta automaticamente para iframes envuelve el
-      // facade en `<div style="padding-bottom: 56.25%; height: 0; overflow: hidden">` que
-      // fuerza un aspect-ratio 16/9. Si el video es vertical, el facade se renderiza pero
-      // queda RECORTADO por el overflow:hidden del padre. Hay que ajustar tambien ese
-      // contenedor para que respete el ratio real del video.
+      // Aplicable a CUALQUIER provider con ratio vertical: Vimeo (via oEmbed async),
+      // LinkedIn (ratio derivado del iframe original), Wistia con video vertical, etc.
+      function applyVerticalSizingIfNeeded(ratioStr) {
+        if (!ratioStr) return;
+        var parts = ratioStr.split('/');
+        var vw = parseInt(parts[0], 10);
+        var vh = parseInt(parts[1], 10);
+        if (!(vw > 0) || !(vh > 0)) return;
+        if (vh > vw) {
+          wrapper.style.maxHeight = '60vh';
+          wrapper.style.width = 'auto';
+          wrapper.style.margin = '0 auto';
+
+          // Liberar el div padre de Webflow si tiene padding-bottom forzado a 16:9.
+          var parent = wrapper.parentElement;
+          if (parent && parent.style && parent.style.paddingBottom &&
+              parent.style.paddingBottom.indexOf('%') !== -1) {
+            parent.style.paddingBottom = '0';
+            parent.style.height = 'auto';
+          }
+        }
+      }
+
+      // Aplicar sizing vertical AHORA (sincrono) usando el ratio que ya tenemos. Esto
+      // cubre providers no-Vimeo que vienen con ratio vertical en el iframe original
+      // (LinkedIn Reels, Wistia vertical, etc).
+      applyVerticalSizingIfNeeded(wrapperRatio);
+
+      // Para Vimeo SIEMPRE pedimos oEmbed (aunque no usemos el thumb) para obtener el
+      // ratio real del video y ajustar el wrapper. El ratio inicial fue 16/9 placeholder;
+      // cuando llega oEmbed corregimos al ratio real (puede ser vertical 9:16) y re-aplicamos
+      // el tratamiento vertical.
       if (provider.name === 'Vimeo') {
         fetchVimeoMetadata(src, function (meta) {
           if (!meta || !meta.ratio) return;
-
-          var parts = meta.ratio.split('/');
-          var vw = parseInt(parts[0], 10);
-          var vh = parseInt(parts[1], 10);
-          if (!(vw > 0) || !(vh > 0)) return;
-
-          // Ajustar el wrapper al ratio real del video.
           wrapper.style.aspectRatio = meta.ratio;
-
-          // Caso especial verticales (h > w): width:100% en un container de 700px daria
-          // un wrapper de ~1250px de alto, mas alto que el viewport. Limitar la altura
-          // a 60vh y dejar que el width se ajuste para mantener el ratio, centrado.
-          // Tambien hay que LIBERAR al div padre con padding-bottom:56.25% (Webflow inserta
-          // ese wrapping automaticamente para iframes) — sino el facade vertical queda
-          // recortado por el overflow:hidden.
-          if (vh > vw) {
-            wrapper.style.maxHeight = '60vh';
-            wrapper.style.width = 'auto';
-            wrapper.style.margin = '0 auto';
-
-            // Liberar el div padre de Webflow si tiene padding-bottom forzado a 16:9.
-            // Heuristica: buscar el padre INMEDIATO con padding-bottom en pct (Webflow lo
-            // inserta justo arriba del iframe). Quitar el padding-bottom y altura cero.
-            var parent = wrapper.parentElement;
-            if (parent && parent.style && parent.style.paddingBottom &&
-                parent.style.paddingBottom.indexOf('%') !== -1) {
-              parent.style.paddingBottom = '0';
-              parent.style.height = 'auto';
-              // overflow:hidden se mantiene; no afecta porque ya no hay restriccion de altura
-            }
-          }
+          applyVerticalSizingIfNeeded(meta.ratio);
         });
       }
 
