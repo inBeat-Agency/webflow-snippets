@@ -400,8 +400,32 @@
         if (provider.name === 'Vimeo' && realIframe.src.indexOf('autoplay=') === -1) {
           realIframe.src += (realIframe.src.indexOf('?') >= 0 ? '&' : '?') + 'autoplay=1';
         }
+
+        // CRITICO: heredar el sizing del wrapper. El iframe original venia con
+        // `position:absolute; width:100%; height:100%` (atributos preservados), que
+        // depende del padre tener altura definida. Para verticales liberamos el padre
+        // (padding-bottom:0, height:auto), entonces height:100% del iframe da 0.
+        //
+        // Solucion: aplicar al iframe el mismo aspect-ratio + maxHeight + width que
+        // habiamos calculado para el wrapper. Asi el iframe tiene sizing propio
+        // independiente del padre.
         realIframe.style.display = 'block';
+        realIframe.style.position = 'relative';      // anular el absolute heredado
+        realIframe.style.top = 'auto';
+        realIframe.style.left = 'auto';
+        realIframe.style.width = wrapper.style.width || '100%';
+        realIframe.style.height = 'auto';            // dejar que aspect-ratio defina la altura
         realIframe.style.maxWidth = '100%';
+        if (wrapper.style.aspectRatio) {
+          realIframe.style.aspectRatio = wrapper.style.aspectRatio;
+        }
+        if (wrapper.style.maxHeight) {
+          realIframe.style.maxHeight = wrapper.style.maxHeight;
+        }
+        if (wrapper.style.margin) {
+          realIframe.style.margin = wrapper.style.margin;
+        }
+
         wrapper.replaceWith(realIframe);
       }
 

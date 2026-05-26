@@ -18,6 +18,37 @@ Resultados validados:
 
 No requiere release de tag — es documentacion de configuracion en Webflow Designer, no codigo servido por jsDelivr.
 
+## [v1.0.7] — 2026-05-26
+
+### Fixed
+
+#### `blog/rich-text-performance.js` — Vimeos verticales reproducen con altura 0 (invisible)
+
+Bug introducido en v1.0.6 (efecto colateral de "liberar el padre wrapping de Webflow"):
+
+Cuando el usuario clickea el play button de un Vimeo vertical:
+1. `activateEmbed` crea el iframe real con los atributos preservados del original
+2. El iframe original venia con `style="position:absolute; width:100%; height:100%"`
+3. En v1.0.6 liberamos el padre (`padding-bottom:0; height:auto`) para que el facade vertical no quede recortado
+4. **Pero** `height:100%` del iframe necesita altura definida en el padre. Padre con `height:auto` y sin contenido inline = altura 0
+5. Resultado: iframe se monta, video se reproduce (audio audible), pero **render con 0px de altura, invisible**
+
+Fix: cuando reemplazo el wrapper por el iframe real, **transferir el sizing del wrapper al iframe directamente** (aspect-ratio, max-height, width, margin). Tambien anular el `position:absolute` heredado (`position:relative` + `top:auto; left:auto`) para que el iframe se posicione en el flujo normal y respete su propio aspect-ratio.
+
+El iframe ahora tiene sizing independiente del padre — funciona tanto si el padre tiene `padding-bottom:56.25%` (horizontales/Google Drive) como si lo liberamos (verticales).
+
+### Migration
+
+```html
+<!-- antes -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.6/blog/rich-text-performance.js" defer></script>
+
+<!-- despues -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.7/blog/rich-text-performance.js" defer></script>
+```
+
+[v1.0.7]: https://github.com/inBeat-Agency/webflow-snippets/releases/tag/v1.0.7
+
 ## [v1.0.6] — 2026-05-26
 
 ### Changed
