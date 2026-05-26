@@ -311,14 +311,20 @@
             wrapper.style.aspectRatio = meta.ratio;
 
             // Caso especial verticales (h > w): width:100% en un container de 700px daria
-            // un wrapper de ~1250px de alto, mas alto que el viewport. Limitar a 80vh y
-            // dejar que el width se ajuste para mantener el ratio, centrado horizontalmente.
-            // Para horizontales/cuadrados el wrapper queda como estaba (width:100%).
+            // un wrapper de ~1250px de alto, mas alto que el viewport. Limitar la altura
+            // a 60vh y dejar que el width se ajuste para mantener el ratio, centrado
+            // horizontalmente. Para horizontales/cuadrados el wrapper queda como estaba
+            // (width:100%, sin maxHeight).
+            //
+            // 60vh elegido despues de probar 80vh (todavia se sentia "demasiado grande"
+            // segun feedback del usuario en marketing-agency-metrics-guide). 60vh deja al
+            // lector ver mas contexto del blog post arriba y abajo del video, manteniendo
+            // el video lo bastante grande para identificar contenido a primera vista.
             var parts = meta.ratio.split('/');
             var vw = parseInt(parts[0], 10);
             var vh = parseInt(parts[1], 10);
             if (vh > vw) {
-              wrapper.style.maxHeight = '80vh';
+              wrapper.style.maxHeight = '60vh';
               wrapper.style.width = 'auto';
               wrapper.style.margin = '0 auto';
             }

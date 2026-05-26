@@ -18,6 +18,30 @@ Resultados validados:
 
 No requiere release de tag — es documentacion de configuracion en Webflow Designer, no codigo servido por jsDelivr.
 
+## [v1.0.5] — 2026-05-26
+
+### Changed
+
+#### `blog/rich-text-performance.js` — verticales mas chicos (80vh → 60vh)
+
+v1.0.4 limitaba videos verticales a `max-height: 80vh`. Despues de validacion visual con el usuario en `/blog/marketing-agency-metrics-guide`, el feedback fue que **80vh seguia siendo demasiado grande** — el video dominaba la pantalla y dejaba poco contexto del post visible arriba/abajo.
+
+Cambio: `80vh → 60vh`. Verificado visualmente que con 60vh el video sigue siendo lo bastante grande para identificar contenido a primera vista, pero el lector ve mas texto alrededor y la lectura fluye mejor.
+
+NOTA sobre encuadre: el thumbnail de Vimeo a veces se ve "cortado" — la cara aparece sin pelo arriba/sin hombros abajo. Esto es **decisión de Vimeo al generar el thumb**, no del snippet. Vimeo genera thumbs zoomeados en la cara para videos verticales tipo UGC/selfie. El snippet usa `object-fit: contain`, que respeta el ratio sin recortar — el "recorte" visible es el thumbnail mismo. No tenemos control sobre esto desde el snippet.
+
+### Migration
+
+```html
+<!-- antes -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.4/blog/rich-text-performance.js" defer></script>
+
+<!-- despues -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.5/blog/rich-text-performance.js" defer></script>
+```
+
+[v1.0.5]: https://github.com/inBeat-Agency/webflow-snippets/releases/tag/v1.0.5
+
 ## [v1.0.4] — 2026-05-26
 
 ### Fixed
