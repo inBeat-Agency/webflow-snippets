@@ -139,8 +139,49 @@
       var id = getYouTubeId(iframe.src);
       if (!id) return;
 
+      // Si el editor envuelve el iframe en containers custom (ej: tratando de hacer un
+      // "Shorts-style" 9:16 forzado), el wrapper con `width:100%` colapsa el video porque
+      // se acopla al ancho del container del editor (ej. 240px). YouTube siempre es 16:9
+      // nativo — forzar 9:16 da un thumbnail recortado y un video con bandas negras al
+      // hacer play. Mejor ignorar el sizing custom y mostrar el video a su ratio real.
+      //
+      // Fix: detectar containers del editor con `aspect-ratio` o `width` inline y resetar
+      // para que el wrapper se expanda al ancho disponible del rich text. Tope `max-width:
+      // 700px` para que no quede gigante en desktop (alineado con el ancho tipico del
+      // contenido del blog).
+      var customParent = iframe.parentElement;
+      while (customParent && customParent !== document.body) {
+        var customParentStyle = customParent.getAttribute('style') || '';
+        // Si tiene aspect-ratio o width fijo, resetar
+        var hasCustomRatio = /aspect-ratio\s*:/i.test(customParentStyle);
+        var hasCustomWidth = /(^|;)\s*width\s*:\s*\d+px/i.test(customParentStyle);
+        if (hasCustomRatio || hasCustomWidth) {
+          customParent.style.aspectRatio = '';
+          customParent.style.width = '100%';
+          customParent.style.maxWidth = '700px';
+          break;
+        }
+        // Si llegamos al .w-embed (Webflow Custom Code container), parar
+        if (customParent.classList && customParent.classList.contains('w-embed')) break;
+        customParent = customParent.parentElement;
+      }
+
       var wrapper = document.createElement('div');
-      wrapper.style.cssText = 'position:relative;cursor:pointer;background:#1a1a1a;aspect-ratio:16/9;width:100%;overflow:hidden;';
+      wrapper.setAttribute('role', 'button');
+      wrapper.setAttribute('tabindex', '0');
+      wrapper.setAttribute('aria-label', 'Play YouTube video');
+      wrapper.style.cssText = [
+        'position:relative',
+        'cursor:pointer',
+        // Fondo negro profundo, consistente con otros facades (v1.0.6+)
+        'background:#0a0a0a',
+        'aspect-ratio:16/9',
+        'width:100%',
+        'overflow:hidden',
+        'display:flex',
+        'align-items:center',
+        'justify-content:center'
+      ].join(';');
 
       var thumb = document.createElement('img');
       thumb.alt = 'Video thumbnail';
@@ -148,22 +189,76 @@
       thumb.setAttribute('decoding', 'async');
       thumb.style.cssText = 'width:100%;height:100%;object-fit:cover;object-position:center;position:absolute;top:0;left:0;';
       setYoutubeThumbnail(thumb, id, 0);
-
-      var playBtn = document.createElement('div');
-      playBtn.innerHTML = '&#9654;';
-      playBtn.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(255,0,0,0.85);color:#fff;font-size:24px;width:64px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:8px;pointer-events:none;z-index:1;';
-
       wrapper.appendChild(thumb);
-      wrapper.appendChild(playBtn);
 
-      wrapper.addEventListener('click', function () {
+      // Play button minimal — mismo design que aplicamos a Vimeo/Google Drive en v1.0.6.
+      // Reemplaza el play rojo viejo de YouTube; mas consistente visualmente con el resto
+      // de los facades.
+      var playButton = document.createElement('div');
+      playButton.setAttribute('aria-hidden', 'true');
+      playButton.style.cssText = [
+        'position:relative',
+        'z-index:1',
+        'width:80px',
+        'height:80px',
+        'border-radius:50%',
+        'background:rgba(255,255,255,0.25)',
+        'backdrop-filter:blur(4px)',
+        '-webkit-backdrop-filter:blur(4px)',
+        'border:2px solid rgba(255,255,255,0.6)',
+        'display:flex',
+        'align-items:center',
+        'justify-content:center',
+        'transition:transform 0.2s ease, background 0.2s ease',
+        'box-shadow:0 4px 24px rgba(0,0,0,0.4)'
+      ].join(';');
+
+      var playIcon = document.createElement('div');
+      playIcon.style.cssText = [
+        'width:0',
+        'height:0',
+        'border-left:22px solid #fff',
+        'border-top:14px solid transparent',
+        'border-bottom:14px solid transparent',
+        'margin-left:6px'
+      ].join(';');
+      playButton.appendChild(playIcon);
+      wrapper.appendChild(playButton);
+
+      wrapper.addEventListener('mouseenter', function () {
+        playButton.style.transform = 'scale(1.1)';
+        playButton.style.background = 'rgba(255,255,255,0.4)';
+      });
+      wrapper.addEventListener('mouseleave', function () {
+        playButton.style.transform = 'scale(1)';
+        playButton.style.background = 'rgba(255,255,255,0.25)';
+      });
+
+      function activateEmbed() {
         var realIframe = document.createElement('iframe');
         realIframe.src = 'https://www.youtube.com/embed/' + id + '?autoplay=1';
         realIframe.setAttribute('frameborder', '0');
         realIframe.setAttribute('allow', 'autoplay; encrypted-media');
         realIframe.setAttribute('allowfullscreen', '');
-        realIframe.style.cssText = 'width:100%;height:100%;aspect-ratio:16/9;';
+        // Sizing propio del iframe — independiente del container del editor.
+        // Mismo approach que en Vimeo/Google Drive (ver activateEmbed en seccion 3).
+        realIframe.style.cssText = [
+          'display:block',
+          'position:relative',
+          'width:100%',
+          'height:auto',
+          'aspect-ratio:16/9',
+          'max-width:100%'
+        ].join(';');
         wrapper.replaceWith(realIframe);
+      }
+
+      wrapper.addEventListener('click', activateEmbed);
+      wrapper.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          activateEmbed();
+        }
       });
 
       iframe.replaceWith(wrapper);

@@ -18,6 +18,46 @@ Resultados validados:
 
 No requiere release de tag — es documentacion de configuracion en Webflow Designer, no codigo servido por jsDelivr.
 
+## [v1.0.8] — 2026-05-26
+
+### Changed
+
+#### `blog/rich-text-performance.js` — YouTube facade alineado con resto del sistema
+
+Dos cambios coordinados en `applyYoutubeFacades`:
+
+**1. Play button unificado**
+
+El facade de YouTube seguia usando el play button rojo cuadrado de v1.0.0 (que parecia un boton legacy). Migramos al play button minimal blanco translucido que ya usaban Vimeo, Google Drive y los demas facades desde v1.0.6.
+
+Visualmente todos los facades del sistema ahora son consistentes: fondo `#0a0a0a`, play button circular 80x80 con `backdrop-filter: blur(4px)`, borde semitransparente, sombra y hover scale 1.1x.
+
+**2. Resilencia a containers custom del editor**
+
+Detectado en `/blog/top-performance-marketing-agencies-london`: el editor envolvio un iframe YouTube en un container `<div style="width:240px; aspect-ratio:9/16;">` tratando de simular un YouTube Shorts (vertical). El facade con `width:100%` se acoplaba al `240px` del container, dando un video de 240x135 px — invisible practicamente.
+
+Pero **YouTube siempre es 16:9 nativo**. Forzar 9:16 produce:
+- Antes del play: thumbnail recortado y diminuto
+- Despues del play: bandas negras grandes en iframe vertical
+
+Fix: cuando el iframe YouTube tiene un container padre con `aspect-ratio` o `width: <Npx>` inline, resetar esos atributos y forzar `width:100%; max-width:700px`. El video se expande al ancho del rich text (con tope razonable para desktop) y respeta su ratio 16:9 real.
+
+**3. Iframe sizing propio al hacer play**
+
+Mismo fix de v1.0.7 ahora aplicado a YouTube: el iframe activado al click tiene `width:100%; height:auto; aspect-ratio:16/9; max-width:100%` para que sea independiente del sizing del padre.
+
+### Migration
+
+```html
+<!-- antes -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.7/blog/rich-text-performance.js" defer></script>
+
+<!-- despues -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.8/blog/rich-text-performance.js" defer></script>
+```
+
+[v1.0.8]: https://github.com/inBeat-Agency/webflow-snippets/releases/tag/v1.0.8
+
 ## [v1.0.7] — 2026-05-26
 
 ### Fixed
