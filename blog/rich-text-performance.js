@@ -309,6 +309,19 @@
             // sube respecto al placeholder 16/9 inicial. Es un CLS pequeno aceptado para
             // resolver el problema mayor de aplastamiento.
             wrapper.style.aspectRatio = meta.ratio;
+
+            // Caso especial verticales (h > w): width:100% en un container de 700px daria
+            // un wrapper de ~1250px de alto, mas alto que el viewport. Limitar a 80vh y
+            // dejar que el width se ajuste para mantener el ratio, centrado horizontalmente.
+            // Para horizontales/cuadrados el wrapper queda como estaba (width:100%).
+            var parts = meta.ratio.split('/');
+            var vw = parseInt(parts[0], 10);
+            var vh = parseInt(parts[1], 10);
+            if (vh > vw) {
+              wrapper.style.maxHeight = '80vh';
+              wrapper.style.width = 'auto';
+              wrapper.style.margin = '0 auto';
+            }
           }
         });
       }

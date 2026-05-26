@@ -18,6 +18,42 @@ Resultados validados:
 
 No requiere release de tag — es documentacion de configuracion en Webflow Designer, no codigo servido por jsDelivr.
 
+## [v1.0.4] — 2026-05-26
+
+### Fixed
+
+#### `blog/rich-text-performance.js` — videos verticales ocupando el viewport completo
+
+v1.0.3 corrigio el aspect-ratio de videos verticales (Reels-style 9:16), pero el wrapper mantenia `width:100%`. En un container de blog post de ~704px de ancho, un video vertical render como **704x1252 px** — mas alto que el viewport, forzando al lector a scrollear para ver fuera del video.
+
+Verificado visualmente en `/blog/marketing-agency-metrics-guide` con Playwright: el wrapper post-v1.0.3 ocupaba toda la pantalla, dejando casi nada de texto visible alrededor. Esteticamente roto.
+
+Fix: cuando el ratio real del Vimeo es vertical (`height > width`), aplicar:
+
+- `max-height: 80vh` para limitar al 80% del viewport
+- `width: auto` para que el ancho se derive del ratio (mantiene proporciones)
+- `margin: 0 auto` para centrar horizontalmente
+
+Para horizontales/cuadrados el wrapper queda como antes (`width:100%`, sin max-height).
+
+Resultado visual: video vertical de ~350x620 px centrado, con contexto visible arriba y abajo. Compatible con mobile (80vh es proporcional al viewport).
+
+### Migration
+
+Actualizar la linea del `<script src>` en los templates de Webflow:
+
+```html
+<!-- antes -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.3/blog/rich-text-performance.js" defer></script>
+
+<!-- despues -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.4/blog/rich-text-performance.js" defer></script>
+```
+
+Republicar el site.
+
+[v1.0.4]: https://github.com/inBeat-Agency/webflow-snippets/releases/tag/v1.0.4
+
 ## [v1.0.3] — 2026-05-26
 
 ### Fixed
