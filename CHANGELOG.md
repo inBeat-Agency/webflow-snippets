@@ -18,6 +18,63 @@ Resultados validados:
 
 No requiere release de tag — es documentacion de configuracion en Webflow Designer, no codigo servido por jsDelivr.
 
+## [v1.0.10] — 2026-05-27
+
+### Changed
+
+#### `blog/rich-text-performance.js` — facade solo para providers con buen preview
+
+**Decision estetica**: la auditoria de v1.0.1 → v1.0.9 termino con un facade que funciona pero estetica generica: fondo negro `#0a0a0a` con play button blanco translucido. Esto cubre todos los providers que NO tienen un thumbnail real bueno (Vimeo entrega thumbs zoomeados, Google Drive no entrega nada, LinkedIn carga un embed propio, etc).
+
+Despues de revisarlo con el usuario, decidimos que **el placeholder negro generico empeora la estetica del blog** cuando hay multiples embeds. El facade pattern es valioso por performance pero solo vale la pena cuando podemos mostrar un preview decente.
+
+**Cambio**: agregar flag `applyFacade: true/false` en `getProviderInfo`. Solo aplica facade a:
+- YouTube (`applyYoutubeFacades`, thumbnail real del video, siempre aplica)
+- TikTok (`applyTikTokFacades`, thumbnail real, siempre aplica)
+- Instagram (`applyInstagramFacades`, gradient brand, siempre aplica)
+
+NO aplica facade (carga iframe nativo desde el HTML):
+- Vimeo, LinkedIn, Loom, Frame.io, Wistia, Spotify
+- Google Drive, Google Docs / Slides
+- Embeds desconocidos (default: no facade)
+
+Estos providers cargan sus propios players con su propio preview (frame del video, embed card, etc) que se ve mejor que el fondo negro nuestro.
+
+### Tradeoff de performance
+
+Esto **revierte parcialmente** la ganancia de performance medida en v1.0.7 (+10 puntos mobile mediana). Sin el facade Vimeo, el `player.vimeo.com/player.js` (~400KB) se descarga inmediatamente en blogs con embeds Vimeo. Lo mismo para LinkedIn (`platform.linkedin.com`).
+
+Estimacion conservadora del impacto: **perdida de 10-20 puntos mobile** en blogs con multiples embeds Vimeo/LinkedIn. Compensacion: mejor estetica.
+
+Si en el futuro se quiere recuperar performance manteniendo estetica:
+1. Generar placeholders custom por provider (gradient brand, etc) — mas trabajo de design
+2. Hacer `applyFacade` configurable (algunos posts con facade, otros sin)
+3. Volver al facade aceptando la estetica negra (revertir este commit)
+
+### Implementacion
+
+Cambio minimo: en `applyOtherIframeFacades`, early-return si `provider.applyFacade === false`:
+
+```js
+var provider = getProviderInfo(src);
+if (!provider.applyFacade) return;  // <-- v1.0.10
+// resto de la logica del facade...
+```
+
+YouTube/TikTok/Instagram tienen funciones separadas (`applyYoutubeFacades`, `applyTikTokFacades`, `applyInstagramFacades`), no pasan por `applyOtherIframeFacades`. Mantienen su facade.
+
+### Migration
+
+```html
+<!-- antes -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.9/blog/rich-text-performance.js" defer></script>
+
+<!-- despues -->
+<script src="https://cdn.jsdelivr.net/gh/inBeat-Agency/webflow-snippets@v1.0.10/blog/rich-text-performance.js" defer></script>
+```
+
+[v1.0.10]: https://github.com/inBeat-Agency/webflow-snippets/releases/tag/v1.0.10
+
 ## [v1.0.9] — 2026-05-26
 
 ### Fixed

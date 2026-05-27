@@ -278,28 +278,43 @@
     try {
       var url = new URL(src);
       var host = url.hostname.replace(/^www\./, '');
-      // Vimeo: ratio NO fijo. Se deriva del oEmbed response (width/height del video real).
-      // Esto cubre videos verticales (Reels-style 9:16), cuadrados, etc.
+
+      // `applyFacade` decide si interceptamos el iframe con un facade ligero o lo
+      // dejamos cargar nativo desde el HTML. Decision desde v1.0.10:
       //
-      // supportsThumb: false desde v1.0.6 — Vimeo entrega thumbs zoomeados en la cara para
-      // videos verticales UGC/selfie, que visualmente se ven "cortados" (sin pelo arriba/sin
-      // hombros abajo). Como el thumb es decision de Vimeo y no podemos pedir uno distinto,
-      // optamos por placeholder negro + play button grande (mas neutral y profesional).
-      if (host.indexOf('vimeo.com') >= 0) return { name: 'Vimeo', ratio: null, supportsThumb: false };
-      if (host.indexOf('linkedin.com') >= 0) return { name: 'LinkedIn', ratio: null, supportsThumb: false };
-      if (host.indexOf('loom.com') >= 0) return { name: 'Loom', ratio: '16/9', supportsThumb: false };
-      if (host.indexOf('frame.io') >= 0) return { name: 'Frame.io', ratio: '16/9', supportsThumb: false };
-      if (host.indexOf('wistia.') >= 0 || host.indexOf('wistia.net') >= 0) return { name: 'Wistia', ratio: '16/9', supportsThumb: false };
-      if (host.indexOf('spotify.com') >= 0) return { name: 'Spotify', ratio: null, supportsThumb: false };
-      // Google Drive / Docs / Slides — los embeds suelen venir con `width="100%"` que
-      // rompe el calculo de ratio (parseInt("100%") -> 100). Fijar 16/9 como default
-      // razonable; para PDFs verticales el usuario puede pegar el iframe con width/height
-      // numericos explicitos si necesita un ratio distinto.
-      if (host.indexOf('drive.google.com') >= 0) return { name: 'Google Drive', ratio: '16/9', supportsThumb: false };
-      if (host.indexOf('docs.google.com') >= 0) return { name: 'Google Docs', ratio: '16/9', supportsThumb: false };
-      return { name: 'Embed', ratio: null, supportsThumb: false };
+      // - applyFacade: true  -> tenemos un buen preview visual (thumbnail real del video,
+      //   gradient del brand, etc). YouTube, TikTok, Instagram son los unicos casos en el
+      //   set actual con un facade que NO empeora la estetica del post.
+      //
+      // - applyFacade: false -> mejor dejar el iframe nativo cargar. Es lo que pasa con
+      //   Vimeo (sin thumb decente desde v1.0.6), LinkedIn, Google Drive, Loom, Frame.io,
+      //   Wistia, Spotify. Estos providers cargan su propio player con su propio preview
+      //   (frame del video, embed card, etc) que se ve mejor que nuestro fondo negro
+      //   generico con play button.
+      //
+      // Tradeoff explicito: perdemos el beneficio de performance del facade pattern
+      // (no descargamos el player.js de Vimeo, LinkedIn, etc hasta que el usuario clickea).
+      // Compensacion: mejor estetica en posts con multiples embeds verticales / Reels.
+      // Si en el futuro queremos recuperar performance, podemos:
+      //   1) Generar placeholders custom mas bonitos por provider (gradient brand, etc)
+      //   2) Hacer applyFacade configurable por instalacion
+      //
+      // YouTube y TikTok tienen su propia funcion (applyYoutubeFacades, applyTikTokFacades)
+      // y se mantienen siempre con facade — entonces el flag aca aplica solo a los
+      // providers que pasan por applyOtherIframeFacades.
+      if (host.indexOf('vimeo.com') >= 0) return { name: 'Vimeo', ratio: null, supportsThumb: false, applyFacade: false };
+      if (host.indexOf('linkedin.com') >= 0) return { name: 'LinkedIn', ratio: null, supportsThumb: false, applyFacade: false };
+      if (host.indexOf('loom.com') >= 0) return { name: 'Loom', ratio: '16/9', supportsThumb: false, applyFacade: false };
+      if (host.indexOf('frame.io') >= 0) return { name: 'Frame.io', ratio: '16/9', supportsThumb: false, applyFacade: false };
+      if (host.indexOf('wistia.') >= 0 || host.indexOf('wistia.net') >= 0) return { name: 'Wistia', ratio: '16/9', supportsThumb: false, applyFacade: false };
+      if (host.indexOf('spotify.com') >= 0) return { name: 'Spotify', ratio: null, supportsThumb: false, applyFacade: false };
+      if (host.indexOf('drive.google.com') >= 0) return { name: 'Google Drive', ratio: '16/9', supportsThumb: false, applyFacade: false };
+      if (host.indexOf('docs.google.com') >= 0) return { name: 'Google Docs', ratio: '16/9', supportsThumb: false, applyFacade: false };
+      // Providers desconocidos: NO aplicar facade. Mejor dejar el iframe nativo cargar
+      // que mostrar un fondo negro generico que no sabemos si es lo que el usuario quiere.
+      return { name: 'Embed', ratio: null, supportsThumb: false, applyFacade: false };
     } catch (e) {
-      return { name: 'Embed', ratio: null, supportsThumb: false };
+      return { name: 'Embed', ratio: null, supportsThumb: false, applyFacade: false };
     }
   }
 
@@ -338,6 +353,12 @@
       if (!src) return;
 
       var provider = getProviderInfo(src);
+
+      // Desde v1.0.10: skip providers sin facade decente.
+      // Vimeo, LinkedIn, Google Drive, Loom, etc cargan iframe nativo desde Webflow.
+      // Su propio player muestra un preview mejor que nuestro fondo negro generico.
+      // Ver getProviderInfo para la decision detallada.
+      if (!provider.applyFacade) return;
 
       // Resolver aspect-ratio del wrapper:
       //   1. Provider con ratio fijo (Loom, Google Drive, etc): usarlo directo.
