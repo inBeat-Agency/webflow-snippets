@@ -18,6 +18,33 @@ Resultados validados:
 
 No requiere release de tag — es documentacion de configuracion en Webflow Designer, no codigo servido por jsDelivr.
 
+## [v1.1.0] — 2026-06-01
+
+### Added
+
+#### `global/youtube-head-interceptor.js`
+
+MutationObserver inline para el `<head>` que frena la descarga eager del player de YouTube (~440 KB) en blog posts con iframes hardcoded.
+
+Problema: `rich-text-performance.js` corre con `defer`, o sea DESPUES de que el browser ya empezo a descargar los iframes. El facade se aplicaba visualmente pero los bytes ya se habian gastado (limitacion conocida, ver caso /nyc-tiktok-statistics).
+
+Solucion: el interceptor corre lo mas temprano posible (inline en el head, sin defer) y captura cada iframe de YouTube apenas aparece en el DOM, poniendole `src="about:blank"` y guardando la URL real en `data-yt-src`.
+
+IMPORTANTE: va INLINE en Webflow Site Settings → Head Code, NO via jsDelivr (necesita correr sin latencia de red, antes del parse del body).
+
+Afecta 16 blog posts del baseline con video hardcoded, incluido `top-search-engine-marketing-agencies` (1354 visitas/mes).
+
+Verificado en DOM controlado: 3/3 iframes YouTube neutralizados, Vimeo intacto, parametros de URL (`?start=`) preservados.
+
+### Changed
+
+#### `blog/rich-text-performance.js`
+
+- `applyYoutubeFacades()` ahora detecta iframes neutralizados por el interceptor: query incluye `[data-yt-intercepted]` y lee la URL real desde `data-yt-src`.
+- Thumbnail usa `i.ytimg.com` (host recomendado) y arranca en `maxresdefault` (1280×720) para mejor nitidez en pantallas retina.
+- `activateEmbed()` preserva los parametros de la URL original (`start=`, `list=`) al activar el video.
+- Sin el interceptor instalado, el snippet sigue funcionando igual que v1.0.10 (backwards compatible).
+
 ## [v1.0.10] — 2026-05-27
 
 ### Changed
