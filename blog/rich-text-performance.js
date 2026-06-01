@@ -23,12 +23,22 @@
  *   5. Facade para Vimeo, Loom, Frame.io, LinkedIn, Wistia, Spotify
  *   6. Facade para TikTok (intercepta blockquote antes de que embed.js corra)
  *   7. Facade para Instagram (intercepta blockquote + bloquea embed.js)
+ *   8. (v1.1.0) Compatible con youtube-head-interceptor.js: detecta iframes
+ *      neutralizados via data-yt-src y los procesa igual que los nativos.
  *
  * IMPORTANTE - PRECONDICIONES:
  *   Si tenes Embeds con scripts globales de TikTok o Instagram en el template
  *   (<script async src="https://www.tiktok.com/embed.js">), REMOVELOS antes de
  *   activar este script. El facade los reemplaza. Si embed.js corre primero,
  *   este script no puede deshacer el daño.
+ *
+ *   YOUTUBE EAGER LOADING (v1.1.0):
+ *   Este script corre con defer, o sea DESPUES de que el browser ya empezo a
+ *   descargar los iframes de YouTube hardcoded (440 KB de player JS). Para
+ *   prevenir ESA descarga, instalar tambien youtube-head-interceptor.js en el
+ *   <head> (inline, sin defer). El interceptor neutraliza los iframes antes de
+ *   la descarga y este script los reemplaza por facade. Sin el interceptor, el
+ *   facade igual funciona visualmente pero los 440 KB ya se descargaron.
  *
  * COMO VERIFICAR DESPUES DE PUBLICAR:
  *   1. DevTools Console: no debe haber errores
@@ -117,16 +127,25 @@
     return match ? match[1] : null;
   }
 
+  // Orden de calidad: maxresdefault (1280x720) es el mejor. sddefault (640x480),
+  // hqdefault (480x360), mqdefault (320x180) son fallbacks progresivamente peores.
+  // Arrancamos siempre por maxres para que el thumbnail se vea nitido en pantallas
+  // retina; solo bajamos si YouTube no tiene esa resolucion para el video.
   var youtubeFallbacks = ['maxresdefault', 'sddefault', 'hqdefault', 'mqdefault'];
 
   function setYoutubeThumbnail(img, id, index) {
     if (index >= youtubeFallbacks.length) return;
-    img.src = 'https://img.youtube.com/vi/' + id + '/' + youtubeFallbacks[index] + '.jpg';
+    // i.ytimg.com es el host de thumbnails recomendado (mismo origen que usa el
+    // player). Usamos hq fallback chain. crossorigin anonymous evita problemas de
+    // tainting si en el futuro se procesa el thumbnail en canvas.
+    img.src = 'https://i.ytimg.com/vi/' + id + '/' + youtubeFallbacks[index] + '.jpg';
     img.onerror = function () {
       setYoutubeThumbnail(img, id, index + 1);
     };
     img.onload = function () {
-      // El placeholder generico de YouTube es 120x90 — si lo recibimos, saltar al siguiente
+      // YouTube devuelve un placeholder gris de 120x90 cuando la resolucion pedida
+      // no existe para ese video (en vez de un 404). Si recibimos ese tamano,
+      // saltar al siguiente fallback de menor resolucion (que SI deberia existir).
       if (img.naturalWidth === 120 && img.naturalHeight === 90) {
         setYoutubeThumbnail(img, id, index + 1);
       }
@@ -134,9 +153,19 @@
   }
 
   function applyYoutubeFacades() {
-    var iframes = document.querySelectorAll('.w-richtext iframe[src*="youtube"]');
+    // Detectar dos casos:
+    //   1. iframes nativos con src de youtube (sin interceptor, o interceptor no corrio)
+    //   2. iframes neutralizados por el head-interceptor v1.1.0: src="about:blank" +
+    //      data-yt-src con la URL original. Buscamos por [data-yt-intercepted] para
+    //      cubrir ese caso sin depender de que el src todavia tenga "youtube".
+    var iframes = document.querySelectorAll(
+      '.w-richtext iframe[src*="youtube"], .w-richtext iframe[data-yt-intercepted]'
+    );
     iframes.forEach(function (iframe) {
-      var id = getYouTubeId(iframe.src);
+      // El interceptor head-level guarda la URL real en data-yt-src. Si existe,
+      // usarla; sino, leer el src nativo.
+      var realSrc = iframe.getAttribute('data-yt-src') || iframe.src;
+      var id = getYouTubeId(realSrc);
       if (!id) return;
 
       // Si el editor envuelve el iframe en containers custom (ej: tratando de hacer un
@@ -236,7 +265,16 @@
 
       function activateEmbed() {
         var realIframe = document.createElement('iframe');
-        realIframe.src = 'https://www.youtube.com/embed/' + id + '?autoplay=1';
+        // Si el interceptor guardo la URL original (data-yt-src), preservar sus
+        // parametros (start=, list=, etc) y solo agregar autoplay. Sino,
+        // reconstruir la URL minima desde el id.
+        var embedSrc;
+        if (realSrc && /\/embed\//.test(realSrc) && realSrc !== 'about:blank') {
+          embedSrc = realSrc + (realSrc.indexOf('?') >= 0 ? '&' : '?') + 'autoplay=1';
+        } else {
+          embedSrc = 'https://www.youtube.com/embed/' + id + '?autoplay=1';
+        }
+        realIframe.src = embedSrc;
         realIframe.setAttribute('frameborder', '0');
         realIframe.setAttribute('allow', 'autoplay; encrypted-media');
         realIframe.setAttribute('allowfullscreen', '');
